@@ -1,0 +1,60 @@
+[telegram]
+# Get bot token from @BotFather on Telegram
+# Required - application will not start without this
+bot_token = YOUR_BOT_TOKEN_HERE
+
+[openrouter]
+# Get API key from https://openrouter.ai/keys
+# Required - application will not start without this
+api_key = YOUR_OPENROUTER_API_KEY_HERE
+
+# Model IDs from https://openrouter.ai/models
+# At least one must be provided
+# free_model is tried first; paid_model used as fallback if rate-limited
+free_model = nvidia/nemotron-3-super-120b-a12b:free
+paid_model = mistralai/mistral-nemo
+
+[database]
+# SQLite database path (optional - default shown)
+sqlite_path = /var/lib/ortgbot.db
+
+# Inactive records age that need clean up (optional - default shown)
+inactive_records_cleanup_days = 30
+
+[rate_limits]
+# Expired entries age that need clean up (optional - default shown)
+rate_limits_cleanup_window_hours = 24
+
+# Limiting interactions to prevent abuse (optional - default shown)
+per_user_replies_per_hour = 20
+per_group_replies_per_day = 200
+
+# Maximum API calls per day (optional - default shown)
+global_api_calls_per_day = 1000
+
+[analytics]
+# Max messages to store and analyze (optional - default shown)
+message_limit = 30
+
+# Maximum trends to include in context analysis (optional - default shown)
+max_trends_for_context = 5
+
+[behavior]
+# Default language for new groups (single word, optional - default shown)
+bot_language = English
+
+# Probability (0.0-1.0) of sending a follow-up message (optional - default shown)
+follow_up_probability = 0.05
+
+# Probability (0.0-1.0) of replying to any message (optional - default shown)
+reply_probability = 0.15
+
+# Default trigger word for new groups (single word, optional - default shown)
+trigger_word = bro
+
+[logging]
+# Log level: DEBUG, INFO, WARNING, ERROR (optional - default shown)
+level = WARNING
+
+# Log file path (optional - default shown)
+log_file = /var/log/ortgbot.log

@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+.pytest_cache/
+*.py[codz]
+*$py.class
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Environments
+config.ini
+venv/
+
+# PyCharm
+.idea/
+
+# Visual Studio Code
+ .vscode/
+
+# Ruff stuff:
+.ruff_cache/
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+
+*.log

@@ -1,0 +1,43 @@
+#!/bin/sh
+
+NAME=ortgbot
+PIDFILE=/var/run/$NAME.pid
+WORKDIR=/root/ortgbot
+
+start() {
+    echo "Starting $NAME..."
+    cd $WORKDIR || exit 1
+    start-stop-daemon -S -q -b -m -p $PIDFILE \
+        -d $WORKDIR -x /usr/bin/python3 -- -m src.poller
+    echo "OK"
+}
+
+stop() {
+    echo "Stopping $NAME..."
+    start-stop-daemon -K -q -p $PIDFILE
+    rm -f $PIDFILE
+    echo "OK"
+}
+
+restart() {
+    stop
+    sleep 1
+    start
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart|reload)
+        restart
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+
+exit 0
