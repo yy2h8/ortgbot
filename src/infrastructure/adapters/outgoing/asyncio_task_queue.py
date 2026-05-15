@@ -9,8 +9,11 @@ from src.application.use_cases.follow_up_message import FollowUpMessageUseCase
 class AsyncioTaskQueue(TaskQueue):
     """Task queue implementation using asyncio.create_task"""
 
+    MAX_CONCURRENT_TASKS: int = 5
+
     def __init__(self, logger: logging.Logger):
         self.logger = logger
+        self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_TASKS)
 
     def queue_reply_to_message(
         self, telegram_message_id: str, randomly_selected: bool = False
@@ -28,15 +31,16 @@ class AsyncioTaskQueue(TaskQueue):
         """Background task wrapper for bot reply generation"""
         from src.infrastructure.core.dishka_lifecycle import get_container
 
-        try:
-            container = get_container()
-            use_case = await container.get(ReplyToMessageUseCase)
-            await use_case.execute(telegram_message_id, randomly_selected)
-        except Exception as e:
-            self.logger.error(
-                f"Bot reply failed for message {telegram_message_id}: {e}",
-                exc_info=True,
-            )
+        async with self._semaphore:
+            try:
+                container = get_container()
+                use_case = await container.get(ReplyToMessageUseCase)
+                await use_case.execute(telegram_message_id, randomly_selected)
+            except Exception as e:
+                self.logger.error(
+                    f"Bot reply failed for message {telegram_message_id}: {e}",
+                    exc_info=True,
+                )
 
     async def _follow_up_with_delay(
         self, telegram_message_id: str, delay: float
@@ -44,13 +48,14 @@ class AsyncioTaskQueue(TaskQueue):
         """Background task wrapper for follow-up message with delay"""
         from src.infrastructure.core.dishka_lifecycle import get_container
 
-        try:
-            await asyncio.sleep(delay)
-            container = get_container()
-            use_case = await container.get(FollowUpMessageUseCase)
-            await use_case.execute(telegram_message_id)
-        except Exception as e:
-            self.logger.error(
-                f"Follow-up message failed for message {telegram_message_id}: {e}",
-                exc_info=True,
-            )
+        await asyncio.sleep(delay)
+        async with self._semaphore:
+            try:
+                container = get_container()
+                use_case = await container.get(FollowUpMessageUseCase)
+                await use_case.execute(telegram_message_id)
+            except Exception as e:
+                self.logger.error(
+                    f"Follow-up message failed for message {telegram_message_id}: {e}",
+                    exc_info=True,
+                )
