@@ -256,6 +256,7 @@ async def test_handle_incoming_reply_chain_resolved():
     dto = make_telegram_message(reply_to_message_tg_id=555)
     await service.handle_incoming_group_message(dto, "mybot")
 
+    message_repo.find_by_tg_id.assert_called_once_with(group.telegram_group_id, 555)
     call_arg = message_repo.create.call_args[0][0]
     assert call_arg.reply_to_message_id == 99
 
@@ -280,6 +281,7 @@ async def test_handle_incoming_reply_chain_not_found():
     dto = make_telegram_message(reply_to_message_tg_id=999)
     await service.handle_incoming_group_message(dto, "mybot")
 
+    message_repo.find_by_tg_id.assert_called_once_with(group.telegram_group_id, 999)
     call_arg = message_repo.create.call_args[0][0]
     assert call_arg.reply_to_message_id is None
 

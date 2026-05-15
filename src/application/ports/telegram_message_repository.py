@@ -7,10 +7,11 @@ class TelegramMessageRepository(ABC):
     """Port for message data access operations."""
 
     @abstractmethod
-    async def find_by_tg_id(self, tg_id: int) -> Message | None:
+    async def find_by_tg_id(self, telegram_group_id: int, tg_id: int) -> Message | None:
         """Find message by Telegram message ID.
 
         Args:
+            telegram_group_id: Internal group identifier
             tg_id: Telegram message ID
 
         Returns:

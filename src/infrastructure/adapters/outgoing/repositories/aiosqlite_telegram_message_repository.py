@@ -13,8 +13,8 @@ class AiosqliteTelegramMessageRepository(TelegramMessageRepository):
         self._db = db
         self.logger = logger
 
-    async def find_by_tg_id(self, tg_id: int) -> Message | None:
-        self.logger.debug(f"Finding message by tg_id {tg_id}")
+    async def find_by_tg_id(self, telegram_group_id: int, tg_id: int) -> Message | None:
+        self.logger.debug(f"Finding message by tg_id {tg_id} in group {telegram_group_id}")
         async with self._db.get_connection() as conn:
             cursor = await conn.execute(
                 """
@@ -22,9 +22,9 @@ class AiosqliteTelegramMessageRepository(TelegramMessageRepository):
                        reply_to_message_id, tg_id, content, timestamp,
                        is_reply_to_bot_message, is_generated, created_at
                 FROM telegram_messages
-                WHERE tg_id = ?
+                WHERE telegram_group_id = ? AND tg_id = ?
                 """,
-                (tg_id,),
+                (telegram_group_id, tg_id),
             )
             row = await cursor.fetchone()
 

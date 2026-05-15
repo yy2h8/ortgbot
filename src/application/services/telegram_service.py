@@ -112,6 +112,7 @@ class TelegramService:
         reply_to_message_id = None
         if dto.reply_to_message_tg_id:
             reply_message = await self.message_repo.find_by_tg_id(
+                group.telegram_group_id,
                 dto.reply_to_message_tg_id
             )
             if reply_message:
