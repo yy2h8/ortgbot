@@ -20,48 +20,38 @@ class AiosqliteRateLimiter(RateLimiter):
         cutoff = current_time - window.total_seconds()
 
         async with self._db.get_connection() as conn:
+            # Single atomic statement: the INSERT only happens if COUNT < limit.
             cursor = await conn.execute(
-                "SELECT COUNT(*) FROM rate_limit_entries WHERE key = ? AND timestamp >= ?",
-                (key, cutoff),
+                """
+                INSERT INTO rate_limit_entries (key, timestamp)
+                SELECT ?, ?
+                WHERE (
+                    SELECT COUNT(*) FROM rate_limit_entries
+                    WHERE key = ? AND timestamp >= ?
+                ) < ?
+                """,
+                (key, current_time, key, cutoff, limit),
             )
-            row = await cursor.fetchone()
-            current_count = row[0] if row else 0
+            await conn.commit()
+            allowed = cursor.rowcount == 1
 
-            allowed = current_count < limit
-
-            if allowed:
-                await conn.execute(
-                    "INSERT INTO rate_limit_entries (key, timestamp) VALUES (?, ?)",
-                    (key, current_time),
-                )
-                await conn.commit()
-
-            self.logger.info(
-                f"Rate limit check: key={key}, count={current_count}/{limit}, "
-                f"window={window.total_seconds()}s, allowed={allowed}"
-            )
-
-            if not allowed:
-                raise InternalRateLimitError(f"Rate limit exceeded for key={key}")
+        self.logger.info(
+            f"Rate limit check: key={key}, limit={limit}, "
+            f"window={window.total_seconds()}s, allowed={allowed}"
+        )
+        if not allowed:
+            raise InternalRateLimitError(f"Rate limit exceeded for key={key}")
 
     async def cleanup_expired_entries(self) -> None:
         cutoff = time.time() - self.cleanup_window_seconds
 
         async with self._db.get_connection() as conn:
             cursor = await conn.execute(
-                "SELECT COUNT(*) FROM rate_limit_entries WHERE timestamp < ?",
-                (cutoff,),
-            )
-            row = await cursor.fetchone()
-            expired_count = row[0] if row else 0
-
-            await conn.execute(
                 "DELETE FROM rate_limit_entries WHERE timestamp < ?",
                 (cutoff,),
             )
             await conn.commit()
 
-            if expired_count > 0:
-                self.logger.info(
-                    f"Cleaned up {expired_count} expired rate limit entries"
-                )
+            deleted_count = cursor.rowcount or 0
+            if deleted_count > 0:
+                self.logger.info(f"Cleaned up {deleted_count} expired rate limit entries")
