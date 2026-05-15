@@ -54,4 +54,6 @@ class AiosqliteRateLimiter(RateLimiter):
 
             deleted_count = cursor.rowcount or 0
             if deleted_count > 0:
-                self.logger.info(f"Cleaned up {deleted_count} expired rate limit entries")
+                self.logger.info(
+                    f"Cleaned up {deleted_count} expired rate limit entries"
+                )

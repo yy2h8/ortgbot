@@ -13,21 +13,19 @@ class PTBTelegramBot(TelegramBotPort):
         self.logger = logger
 
     async def send_message(
-        self, chat_id: str, text: str, reply_to_message_id: str | None = None
-    ) -> str:
+        self, chat_id: int, text: str, reply_to_message_id: int | None = None
+    ) -> int:
         try:
             message = await self._bot.send_message(
-                chat_id=int(chat_id),
+                chat_id=chat_id,
                 text=text,
-                reply_to_message_id=int(reply_to_message_id)
-                if reply_to_message_id
-                else None,
+                reply_to_message_id=reply_to_message_id,
             )
 
             self.logger.info(
                 f"Message sent successfully to chat {chat_id}, message_id: {message.message_id}"
             )
-            return str(message.message_id)
+            return message.message_id
 
         except Exception as e:
             self.logger.error(f"Failed to send message to chat {chat_id}: {e}")

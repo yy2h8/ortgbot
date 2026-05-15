@@ -14,7 +14,9 @@ class AiosqliteTelegramMessageRepository(TelegramMessageRepository):
         self.logger = logger
 
     async def find_by_tg_id(self, telegram_group_id: int, tg_id: int) -> Message | None:
-        self.logger.debug(f"Finding message by tg_id {tg_id} in group {telegram_group_id}")
+        self.logger.debug(
+            f"Finding message by tg_id {tg_id} in group {telegram_group_id}"
+        )
         async with self._db.get_connection() as conn:
             cursor = await conn.execute(
                 """

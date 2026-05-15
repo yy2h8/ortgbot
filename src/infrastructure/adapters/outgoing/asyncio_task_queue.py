@@ -16,17 +16,17 @@ class AsyncioTaskQueue(TaskQueue):
         self._semaphore = asyncio.Semaphore(self.MAX_CONCURRENT_TASKS)
 
     def queue_reply_to_message(
-        self, telegram_message_id: str, randomly_selected: bool = False
+        self, telegram_message_id: int, randomly_selected: bool = False
     ) -> None:
         asyncio.create_task(
             self._reply_to_message_async(telegram_message_id, randomly_selected)
         )
 
-    def queue_follow_up(self, telegram_message_id: str, delay: float) -> None:
+    def queue_follow_up(self, telegram_message_id: int, delay: float) -> None:
         asyncio.create_task(self._follow_up_with_delay(telegram_message_id, delay))
 
     async def _reply_to_message_async(
-        self, telegram_message_id: str, randomly_selected: bool
+        self, telegram_message_id: int, randomly_selected: bool
     ) -> None:
         """Background task wrapper for bot reply generation"""
         from src.infrastructure.core.dishka_lifecycle import get_container
@@ -43,7 +43,7 @@ class AsyncioTaskQueue(TaskQueue):
                 )
 
     async def _follow_up_with_delay(
-        self, telegram_message_id: str, delay: float
+        self, telegram_message_id: int, delay: float
     ) -> None:
         """Background task wrapper for follow-up message with delay"""
         from src.infrastructure.core.dishka_lifecycle import get_container

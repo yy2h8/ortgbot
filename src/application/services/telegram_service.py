@@ -112,8 +112,7 @@ class TelegramService:
         reply_to_message_id = None
         if dto.reply_to_message_tg_id:
             reply_message = await self.message_repo.find_by_tg_id(
-                group.telegram_group_id,
-                dto.reply_to_message_tg_id
+                group.telegram_group_id, dto.reply_to_message_tg_id
             )
             if reply_message:
                 reply_to_message_id = reply_message.telegram_message_id
@@ -122,11 +121,11 @@ class TelegramService:
 
         if not sanitized_text and should_reply:
             await self.telegram_bot.send_message(
-                chat_id=str(group.tg_id),
+                chat_id=group.tg_id,
                 text=GROUP_GREETING.format(
                     trigger_word=group.trigger_word, username=bot_username
                 ),
-                reply_to_message_id=str(dto.message_tg_id),
+                reply_to_message_id=dto.message_tg_id,
             )
             return
 
@@ -159,7 +158,7 @@ class TelegramService:
             self.task_queue.queue_reply_to_message(message.telegram_message_id, True)
 
     async def reply_to_message(
-        self, telegram_message_id: str, randomly_selected: bool
+        self, telegram_message_id: int, randomly_selected: bool
     ) -> None:
         message = await self.message_repo.find_by_id(telegram_message_id)
         if not message:
@@ -193,9 +192,9 @@ class TelegramService:
             )
             if not randomly_selected:
                 await self.telegram_bot.send_message(
-                    chat_id=str(group.tg_id),
+                    chat_id=group.tg_id,
                     text=RATE_LIMITED,
-                    reply_to_message_id=str(message.tg_id),
+                    reply_to_message_id=message.tg_id,
                 )
             return
 
@@ -206,16 +205,16 @@ class TelegramService:
             return
 
         sent_message_id = await self.telegram_bot.send_message(
-            chat_id=str(group.tg_id),
+            chat_id=group.tg_id,
             text=reply_text,
-            reply_to_message_id=str(message.tg_id),
+            reply_to_message_id=message.tg_id,
         )
         generated_message = await self.message_repo.create(
             Message.create(
                 telegram_group_id=group.telegram_group_id,
                 telegram_group_member_id=None,
                 reply_to_message_id=message.telegram_message_id,
-                tg_id=int(sent_message_id),
+                tg_id=sent_message_id,
                 content=reply_text,
                 is_reply_to_bot_message=False,
                 is_generated=True,
@@ -232,7 +231,7 @@ class TelegramService:
                 generated_message.telegram_message_id, delay
             )
 
-    async def follow_up_message(self, telegram_message_id: str) -> None:
+    async def follow_up_message(self, telegram_message_id: int) -> None:
         bot_message = await self.message_repo.find_by_id(telegram_message_id)
         if not bot_message:
             self.logger.warning(f"Bot message {telegram_message_id} not found")
@@ -289,14 +288,14 @@ class TelegramService:
             follow_up_text_with_mention = follow_up_text
 
         sent_message_id = await self.telegram_bot.send_message(
-            chat_id=str(group.tg_id), text=follow_up_text_with_mention
+            chat_id=group.tg_id, text=follow_up_text_with_mention
         )
         await self.message_repo.create(
             Message.create(
                 telegram_group_id=group.telegram_group_id,
                 telegram_group_member_id=None,
                 reply_to_message_id=None,
-                tg_id=int(sent_message_id),
+                tg_id=sent_message_id,
                 content=follow_up_text,
                 is_reply_to_bot_message=False,
                 is_generated=True,

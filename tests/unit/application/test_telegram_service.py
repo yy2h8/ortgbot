@@ -298,7 +298,7 @@ async def test_reply_to_message_happy_path():
     message_repo.find_by_id.return_value = msg
     group_repo.find_by_id.return_value = group
     msg_gen.reply_to_message.return_value = "Hello!"
-    telegram_bot.send_message.return_value = "999"
+    telegram_bot.send_message.return_value = 999
     message_repo.create.return_value = make_message(telegram_message_id=2, tg_id=999)
 
     service = _make_telegram_service(
@@ -307,7 +307,7 @@ async def test_reply_to_message_happy_path():
         telegram_bot=telegram_bot,
         message_generation_service=msg_gen,
     )
-    await service.reply_to_message("1", randomly_selected=False)
+    await service.reply_to_message(1, randomly_selected=False)
 
     telegram_bot.send_message.assert_called_once()
     gen_call = message_repo.create.call_args[0][0]
@@ -321,7 +321,7 @@ async def test_reply_to_message_not_found():
     message_repo.find_by_id.return_value = None
 
     service = _make_telegram_service(message_repo=message_repo)
-    await service.reply_to_message("999", randomly_selected=False)
+    await service.reply_to_message(999, randomly_selected=False)
 
     message_repo.create.assert_not_called()
 
@@ -339,7 +339,7 @@ async def test_reply_to_message_group_not_found():
         message_repo=message_repo,
         group_repo=group_repo,
     )
-    await service.reply_to_message("1", randomly_selected=False)
+    await service.reply_to_message(1, randomly_selected=False)
 
     message_repo.create.assert_not_called()
 
@@ -363,7 +363,7 @@ async def test_reply_to_message_empty_reply():
         telegram_bot=telegram_bot,
         message_generation_service=msg_gen,
     )
-    await service.reply_to_message("1", randomly_selected=False)
+    await service.reply_to_message(1, randomly_selected=False)
 
     telegram_bot.send_message.assert_not_called()
 
@@ -381,7 +381,7 @@ async def test_reply_to_message_follow_up_scheduled():
     message_repo.find_by_id.return_value = msg
     group_repo.find_by_id.return_value = group
     msg_gen.reply_to_message.return_value = "Hello!"
-    telegram_bot.send_message.return_value = "999"
+    telegram_bot.send_message.return_value = 999
     gen_msg = make_message(telegram_message_id=50, tg_id=999)
     message_repo.create.return_value = gen_msg
 
@@ -396,7 +396,7 @@ async def test_reply_to_message_follow_up_scheduled():
 
     with patch("src.application.services.telegram_service.random.random", return_value=0.1), \
          patch("src.application.services.telegram_service.random.uniform", return_value=20.0):
-        await service.reply_to_message("1", randomly_selected=False)
+        await service.reply_to_message(1, randomly_selected=False)
 
     task_queue.queue_follow_up.assert_called_once_with(50, 20.0)
 
@@ -414,7 +414,7 @@ async def test_reply_to_message_follow_up_not_scheduled():
     message_repo.find_by_id.return_value = msg
     group_repo.find_by_id.return_value = group
     msg_gen.reply_to_message.return_value = "Hello!"
-    telegram_bot.send_message.return_value = "999"
+    telegram_bot.send_message.return_value = 999
     message_repo.create.return_value = make_message(telegram_message_id=50)
 
     service = _make_telegram_service(
@@ -427,7 +427,7 @@ async def test_reply_to_message_follow_up_not_scheduled():
     )
 
     with patch("src.application.services.telegram_service.random.random", return_value=0.9):
-        await service.reply_to_message("1", randomly_selected=False)
+        await service.reply_to_message(1, randomly_selected=False)
 
     task_queue.queue_follow_up.assert_not_called()
 
@@ -454,15 +454,13 @@ async def test_follow_up_with_username():
     member = make_group_member(telegram_group_member_id=5, username="johndoe")
 
     message_repo.find_by_id.side_effect = lambda id: {
-        "2": bot_msg,
         2: bot_msg,
-        "1": original_msg,
         1: original_msg,
     }.get(id)
     group_repo.find_by_id.return_value = group
     member_repo.find_by_id.return_value = member
     msg_gen.follow_up_message.return_value = "Also, check this"
-    telegram_bot.send_message.return_value = "1000"
+    telegram_bot.send_message.return_value = 1000
     message_repo.create.return_value = make_message()
 
     service = _make_telegram_service(
@@ -472,7 +470,7 @@ async def test_follow_up_with_username():
         telegram_bot=telegram_bot,
         message_generation_service=msg_gen,
     )
-    await service.follow_up_message("2")
+    await service.follow_up_message(2)
 
     send_call = telegram_bot.send_message.call_args
     assert "@johndoe" in send_call[1]["text"]
@@ -500,15 +498,13 @@ async def test_follow_up_without_username():
     member = make_group_member(telegram_group_member_id=5, first_name="John", username=None)
 
     message_repo.find_by_id.side_effect = lambda id: {
-        "2": bot_msg,
         2: bot_msg,
-        "1": original_msg,
         1: original_msg,
     }.get(id)
     group_repo.find_by_id.return_value = group
     member_repo.find_by_id.return_value = member
     msg_gen.follow_up_message.return_value = "Also, check this"
-    telegram_bot.send_message.return_value = "1000"
+    telegram_bot.send_message.return_value = 1000
     message_repo.create.return_value = make_message()
 
     service = _make_telegram_service(
@@ -518,7 +514,7 @@ async def test_follow_up_without_username():
         telegram_bot=telegram_bot,
         message_generation_service=msg_gen,
     )
-    await service.follow_up_message("2")
+    await service.follow_up_message(2)
 
     send_call = telegram_bot.send_message.call_args
     assert "John" in send_call[1]["text"]
@@ -545,15 +541,13 @@ async def test_follow_up_member_not_found():
     group = make_group(telegram_group_id=10, tg_id=500)
 
     message_repo.find_by_id.side_effect = lambda id: {
-        "2": bot_msg,
         2: bot_msg,
-        "1": original_msg,
         1: original_msg,
     }.get(id)
     group_repo.find_by_id.return_value = group
     member_repo.find_by_id.return_value = None
     msg_gen.follow_up_message.return_value = "Also check this"
-    telegram_bot.send_message.return_value = "1000"
+    telegram_bot.send_message.return_value = 1000
     message_repo.create.return_value = make_message()
 
     service = _make_telegram_service(
@@ -563,7 +557,7 @@ async def test_follow_up_member_not_found():
         telegram_bot=telegram_bot,
         message_generation_service=msg_gen,
     )
-    await service.follow_up_message("2")
+    await service.follow_up_message(2)
 
     send_call = telegram_bot.send_message.call_args
     assert send_call[1]["text"] == "Also check this"
@@ -575,7 +569,7 @@ async def test_follow_up_bot_message_not_found():
     message_repo.find_by_id.return_value = None
 
     service = _make_telegram_service(message_repo=message_repo)
-    await service.follow_up_message("999")
+    await service.follow_up_message(999)
 
     message_repo.create.assert_not_called()
 
@@ -593,7 +587,7 @@ async def test_follow_up_group_not_found():
         message_repo=message_repo,
         group_repo=group_repo,
     )
-    await service.follow_up_message("2")
+    await service.follow_up_message(2)
 
     message_repo.create.assert_not_called()
 
@@ -616,7 +610,7 @@ async def test_follow_up_original_message_not_found():
         message_repo=message_repo,
         group_repo=group_repo,
     )
-    await service.follow_up_message("2")
+    await service.follow_up_message(2)
 
     message_repo.create.assert_not_called()
 
@@ -642,9 +636,7 @@ async def test_follow_up_empty_follow_up():
     group = make_group(telegram_group_id=10, tg_id=500)
 
     message_repo.find_by_id.side_effect = lambda id: {
-        "2": bot_msg,
         2: bot_msg,
-        "1": original_msg,
         1: original_msg,
     }.get(id)
     group_repo.find_by_id.return_value = group
@@ -656,7 +648,7 @@ async def test_follow_up_empty_follow_up():
         telegram_bot=telegram_bot,
         message_generation_service=msg_gen,
     )
-    await service.follow_up_message("2")
+    await service.follow_up_message(2)
 
     telegram_bot.send_message.assert_not_called()
 
@@ -682,7 +674,7 @@ async def test_reply_to_message_rate_limited():
         message_generation_service=msg_gen,
         rate_limiter=rate_limiter,
     )
-    await service.reply_to_message("1", randomly_selected=False)
+    await service.reply_to_message(1, randomly_selected=False)
 
     msg_gen.reply_to_message.assert_not_called()
     telegram_bot.send_message.assert_called_once()
@@ -711,9 +703,7 @@ async def test_follow_up_message_rate_limited():
     group = make_group(telegram_group_id=10, tg_id=500)
 
     message_repo.find_by_id.side_effect = lambda id: {
-        "2": bot_msg,
         2: bot_msg,
-        "1": original_msg,
         1: original_msg,
     }.get(id)
     group_repo.find_by_id.return_value = group
@@ -726,7 +716,7 @@ async def test_follow_up_message_rate_limited():
         telegram_bot=telegram_bot,
         message_generation_service=msg_gen,
     )
-    await service.follow_up_message("2")
+    await service.follow_up_message(2)
 
     telegram_bot.send_message.assert_not_called()
     message_repo.create.assert_not_called()
@@ -757,7 +747,7 @@ async def test_handle_incoming_empty_text_triggers_greeting():
     message_repo.create.assert_not_called()
     task_queue.queue_reply_to_message.assert_not_called()
     send_call = telegram_bot.send_message.call_args
-    assert send_call[1]["reply_to_message_id"] == str(dto.message_tg_id)
+    assert send_call[1]["reply_to_message_id"] == dto.message_tg_id
     assert "trigger_word" in send_call[1]["text"] or "bot" in send_call[1]["text"]
 
 
@@ -782,7 +772,7 @@ async def test_reply_to_message_rate_limited_randomly_selected_silent():
         message_generation_service=msg_gen,
         rate_limiter=rate_limiter,
     )
-    await service.reply_to_message("1", randomly_selected=True)
+    await service.reply_to_message(1, randomly_selected=True)
 
     msg_gen.reply_to_message.assert_not_called()
     telegram_bot.send_message.assert_not_called()

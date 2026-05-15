@@ -6,8 +6,8 @@ class TelegramBotPort(ABC):
 
     @abstractmethod
     async def send_message(
-        self, chat_id: str, text: str, reply_to_message_id: str | None = None
-    ) -> str:
+        self, chat_id: int, text: str, reply_to_message_id: int | None = None
+    ) -> int:
         """Send a message to a Telegram chat.
 
         Args:

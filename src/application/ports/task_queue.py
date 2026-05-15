@@ -6,7 +6,7 @@ class TaskQueue(ABC):
 
     @abstractmethod
     def queue_reply_to_message(
-        self, telegram_message_id: str, randomly_selected: bool = False
+        self, telegram_message_id: int, randomly_selected: bool = False
     ) -> None:
         """Queue a reply-to-message task for background execution.
 
@@ -17,7 +17,7 @@ class TaskQueue(ABC):
         raise NotImplementedError("Method 'queue_reply_to_message' not implemented")
 
     @abstractmethod
-    def queue_follow_up(self, telegram_message_id: str, delay: float) -> None:
+    def queue_follow_up(self, telegram_message_id: int, delay: float) -> None:
         """Queue a follow-up message task for background execution with delay.
 
         Args:
