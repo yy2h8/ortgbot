@@ -124,6 +124,8 @@ class AiosqliteGroupTrendRepository(GroupTrendRepository):
         self, telegram_group_ids: list[int]
     ) -> dict[int, GroupTrend]:
         self.logger.debug(f"Fetching latest trend for {len(telegram_group_ids)} groups")
+        if not telegram_group_ids:
+            return {}
         placeholders = ",".join("?" * len(telegram_group_ids))
         async with self._db.get_connection() as conn:
             cursor = await conn.execute(
@@ -157,6 +159,8 @@ class AiosqliteGroupTrendRepository(GroupTrendRepository):
 
     async def count_for_groups(self, telegram_group_ids: list[int]) -> dict[int, int]:
         self.logger.debug(f"Counting trends for {len(telegram_group_ids)} groups")
+        if not telegram_group_ids:
+            return {}
         placeholders = ",".join("?" * len(telegram_group_ids))
         async with self._db.get_connection() as conn:
             cursor = await conn.execute(

@@ -226,6 +226,8 @@ class AiosqliteTelegramMessageRepository(TelegramMessageRepository):
         self.logger.debug(
             f"Counting non-generated messages for {len(telegram_group_ids)} groups"
         )
+        if not telegram_group_ids:
+            return {}
         placeholders = ",".join("?" * len(telegram_group_ids))
         async with self._db.get_connection() as conn:
             cursor = await conn.execute(
