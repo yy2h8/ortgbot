@@ -215,7 +215,3 @@ The Pi Zero 2W features an `armv7l` architecture processor. Buildroot is configu
 - Ports and adapters architecture allows for changing infrastructure easily
 
 > `S99ortgbot` contains a simple init.d-style launcher script for the intended deployment. It starts `python3 -m src.poller` from `/root/ortgbot` and tracks a PID file in `/var/run/ortgbot.pid`.
-
-## Known issues
-
-`src/infrastructure/adapters/outgoing/asyncio_task_queue.py` currently uses fire-and-forget `asyncio.create_task(...)` without task tracking or concurrency limits. Under bursty traffic this can create unbounded background work and gives shutdown no way to await in-flight tasks.

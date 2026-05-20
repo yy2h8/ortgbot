@@ -1,21 +1,39 @@
+import asyncio
 import logging
+import random
 from typing import Any
 
 import httpx
 
-from src.domain.exceptions import OpenRouterRateLimitError
+from src.domain.exceptions import EmptyResponseError, OpenRouterRateLimitError
 from src.domain.dto import OpenRouterResponse, Prompt
 from src.application.ports.openrouter_client import OpenRouterClient
 
 
 class HttpxOpenRouterClient(OpenRouterClient):
-    """OpenRouter API client using httpx"""
+    """OpenRouter API client using httpx.
+
+    Transient failures (timeouts, connection errors, HTTP 5xx, malformed
+    responses, empty content) are retried up to MAX_RETRIES times with
+    full-jitter exponential backoff.
+
+    Errors that are never retried:
+      - HTTP 429 → raises OpenRouterRateLimitError immediately (triggers paid-model
+        fallback in AIService)
+      - HTTP 4xx (other than 429) → raises Exception immediately (client errors
+        won't self-heal)
+    """
 
     BASE_URL = "https://openrouter.ai/api/v1"
-    DEFAULT_TIMEOUT = 120.0
+    DEFAULT_TIMEOUT = 45.0
     MAX_CONNECTIONS = 5
     MAX_KEEPALIVE_CONNECTIONS = 2
     KEEPALIVE_EXPIRY = 60.0
+
+    # Retry configuration
+    MAX_RETRIES = 3           # 4 total attempts (initial + 3 retries)
+    RETRY_BACKOFF_BASE = 2.0  # seconds
+    RETRY_BACKOFF_MAX = 30.0  # seconds cap
 
     def __init__(
         self,
@@ -87,6 +105,10 @@ class HttpxOpenRouterClient(OpenRouterClient):
             cost=float(usage.get("cost", 0)),
         )
 
+    def _jitter_sleep(self, attempt: int) -> float:
+        cap = min(self.RETRY_BACKOFF_MAX, self.RETRY_BACKOFF_BASE ** (attempt + 1))
+        return random.uniform(0, cap)
+
     async def request(
         self,
         prompt: Prompt,
@@ -100,29 +122,85 @@ class HttpxOpenRouterClient(OpenRouterClient):
             prompt, max_tokens, temperature, model, top_p, top_k
         )
 
-        try:
-            response = await self._client.post("/chat/completions", json=payload)
+        total_attempts = self.MAX_RETRIES + 1
+        last_exc: Exception = Exception("No attempts made")
 
-            if response.status_code == 200:
-                return self._parse_success_response(response.json(), payload)
-            elif response.status_code == 429:
-                error_msg = f"Rate limit exceeded (429): {response.text}"
-                self.logger.warning(error_msg)
-                raise OpenRouterRateLimitError(error_msg)
-            else:
-                error_msg = (
-                    f"OpenRouter API error {response.status_code}: {response.text}"
+        for attempt in range(total_attempts):
+            retriable_exc: Exception | None = None
+
+            try:
+                response = await self._client.post("/chat/completions", json=payload)
+
+                if response.status_code == 200:
+                    # Wrap parsing so a malformed 200 body is retried, not
+                    # propagated as an unexpected exception.
+                    try:
+                        data = response.json()
+                        parsed = self._parse_success_response(data, payload)
+                    except (ValueError, KeyError, IndexError) as e:
+                        retriable_exc = Exception(
+                            f"Malformed OpenRouter response: {e}"
+                        )
+                    else:
+                        if not parsed.content:
+                            retriable_exc = EmptyResponseError(
+                                "OpenRouter returned empty content"
+                            )
+                        else:
+                            return parsed
+
+                elif response.status_code == 429:
+                    error_msg = (
+                        f"Rate limit exceeded (429): "
+                        f"{response.text[:100]}..."
+                    )
+                    self.logger.warning(error_msg)
+                    raise OpenRouterRateLimitError(error_msg)
+
+                elif response.status_code >= 500:
+                    retriable_exc = Exception(
+                        f"OpenRouter server error {response.status_code}: "
+                        f"{response.text[:100]}..."
+                    )
+
+                else:
+                    # 4xx (non-429): client error, won't self-heal — raise immediately
+                    error_msg = (
+                        f"OpenRouter API error {response.status_code}: "
+                        f"{response.text[:100]}..."
+                    )
+                    self.logger.error(error_msg)
+                    raise Exception(error_msg)
+
+            except OpenRouterRateLimitError:
+                raise  # propagate immediately for paid-model fallback
+
+            # Store the original httpx exception directly: preserves exception
+            # type, message, and traceback context for upstream callers.
+            except httpx.TimeoutException as e:
+                retriable_exc = e
+
+            except httpx.HTTPError as e:
+                retriable_exc = e
+
+            # Explicit guard: retriable_exc must be set at this point.
+            # Any code path that didn't set it either returned, raised
+            # OpenRouterRateLimitError, or raised a fatal 4xx Exception —
+            # none of which reach here.
+            if retriable_exc is None:
+                raise RuntimeError(
+                    "BUG: retry loop reached post-attempt block "
+                    "without setting retriable_exc"
                 )
-                self.logger.error(error_msg)
-                raise Exception(error_msg)
 
-        except httpx.TimeoutException as e:
-            error_msg = f"Request timeout after {self.DEFAULT_TIMEOUT}s: {str(e)}"
-            self.logger.error(error_msg)
-            raise Exception(error_msg)
-        except OpenRouterRateLimitError:
-            raise  # Re-raise without modification
-        except httpx.HTTPError as e:
-            error_msg = f"HTTP error: {str(e)}"
-            self.logger.error(error_msg)
-            raise Exception(error_msg)
+            last_exc = retriable_exc
+
+            if attempt < self.MAX_RETRIES:
+                sleep_s = self._jitter_sleep(attempt)
+                self.logger.warning(
+                    f"Transient error on attempt {attempt + 1}/{total_attempts}: "
+                    f"{last_exc}. Retrying in {sleep_s:.1f}s."
+                )
+                await asyncio.sleep(sleep_s)
+
+        raise last_exc
