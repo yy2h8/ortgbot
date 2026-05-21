@@ -41,7 +41,7 @@ max_trends_for_context = 5
 
 [behavior]
 # Default language for new groups (single word, optional - default shown)
-bot_language = English
+bot_language = Russian
 
 # Probability (0.0-1.0) of sending a follow-up message (optional - default shown)
 follow_up_probability = 0.05
@@ -50,7 +50,7 @@ follow_up_probability = 0.05
 reply_probability = 0.15
 
 # Default trigger word for new groups (single word, optional - default shown)
-trigger_word = bro
+trigger_word = бот
 
 [logging]
 # Log level: DEBUG, INFO, WARNING, ERROR (optional - default shown)
