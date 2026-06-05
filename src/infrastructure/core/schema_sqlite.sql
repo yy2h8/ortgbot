@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS telegram_group_members (
     tg_id INTEGER NOT NULL,
     first_name TEXT NOT NULL,
     username TEXT,
+    is_bot INTEGER NOT NULL DEFAULT 0,
     has_left_group INTEGER,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,

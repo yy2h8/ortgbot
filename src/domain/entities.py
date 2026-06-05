@@ -145,6 +145,7 @@ class GroupMember(NamedTuple):
     telegram_group_id: int
     tg_id: int
     first_name: str
+    is_bot: bool
     has_left_group: bool
     created_at: datetime
     updated_at: datetime
@@ -157,6 +158,7 @@ class GroupMember(NamedTuple):
         telegram_group_id: int,
         tg_id: int,
         first_name: str,
+        is_bot: bool | None = None,
         has_left_group: bool | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -169,6 +171,7 @@ class GroupMember(NamedTuple):
             telegram_group_id=telegram_group_id,
             tg_id=tg_id,
             first_name=first_name,
+            is_bot=is_bot if is_bot is not None else False,
             has_left_group=has_left_group if has_left_group is not None else False,
             created_at=created_at or now,
             updated_at=updated_at or now,

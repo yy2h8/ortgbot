@@ -25,7 +25,7 @@ class AiosqliteTelegramGroupMemberRepository(TelegramGroupMemberRepository):
             cursor = await conn.execute(
                 """
                 SELECT telegram_group_member_id, telegram_group_id, tg_id, first_name,
-                       username, has_left_group, created_at, updated_at
+                       username, is_bot, has_left_group, created_at, updated_at
                 FROM telegram_group_members
                 WHERE tg_id = ? AND telegram_group_id = ?
                 """,
@@ -40,6 +40,7 @@ class AiosqliteTelegramGroupMemberRepository(TelegramGroupMemberRepository):
                     tg_id=row["tg_id"],
                     first_name=row["first_name"],
                     username=row["username"],
+                    is_bot=bool(row["is_bot"]),
                     has_left_group=bool(row["has_left_group"]),
                     created_at=datetime.fromtimestamp(
                         row["created_at"], tz=timezone.utc
@@ -58,7 +59,7 @@ class AiosqliteTelegramGroupMemberRepository(TelegramGroupMemberRepository):
             cursor = await conn.execute(
                 """
                 SELECT telegram_group_member_id, telegram_group_id, tg_id, first_name,
-                       username, has_left_group, created_at, updated_at
+                       username, is_bot, has_left_group, created_at, updated_at
                 FROM telegram_group_members
                 WHERE telegram_group_member_id = ?
                 """,
@@ -73,6 +74,7 @@ class AiosqliteTelegramGroupMemberRepository(TelegramGroupMemberRepository):
                     tg_id=row["tg_id"],
                     first_name=row["first_name"],
                     username=row["username"],
+                    is_bot=bool(row["is_bot"]),
                     has_left_group=bool(row["has_left_group"]),
                     created_at=datetime.fromtimestamp(
                         row["created_at"], tz=timezone.utc
@@ -95,14 +97,15 @@ class AiosqliteTelegramGroupMemberRepository(TelegramGroupMemberRepository):
                     """
                     INSERT INTO telegram_group_members
                     (telegram_group_id, tg_id, first_name,
-                     username, has_left_group, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                     username, is_bot, has_left_group, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         member.telegram_group_id,
                         member.tg_id,
                         member.first_name,
                         member.username,
+                        int(member.is_bot),
                         int(member.has_left_group),
                         int(member.created_at.timestamp()),
                         int(member.updated_at.timestamp()),
@@ -143,6 +146,7 @@ class AiosqliteTelegramGroupMemberRepository(TelegramGroupMemberRepository):
         telegram_group_member_id: int,
         first_name: str,
         username: str | None,
+        is_bot: bool,
     ) -> None:
         self.logger.debug(f"Updating info for member {telegram_group_member_id}")
         async with self._db.get_connection() as conn:
@@ -153,12 +157,14 @@ class AiosqliteTelegramGroupMemberRepository(TelegramGroupMemberRepository):
                     UPDATE telegram_group_members
                     SET first_name = ?,
                         username = ?,
+                        is_bot = ?,
                         updated_at = ?
                     WHERE telegram_group_member_id = ?
                     """,
                     (
                         first_name,
                         username,
+                        int(is_bot),
                         now,
                         telegram_group_member_id,
                     ),

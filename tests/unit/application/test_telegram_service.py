@@ -7,7 +7,7 @@ from src.application.services.message_generation_service import MessageGeneratio
 from src.application.ports.telegram_bot import TelegramBotPort
 from src.application.ports.task_queue import TaskQueue
 from src.application.ports.rate_limiter import RateLimiter
-from src.domain.constants.bot_messages import RATE_LIMITED
+from src.domain.constants.bot_messages import RATE_LIMITED, BOT_RATE_LIMITED
 from src.domain.exceptions import InternalRateLimitError
 from tests.conftest import (
     make_group,
@@ -32,6 +32,7 @@ def _make_telegram_service(
     default_language="English",
     per_user_limit=5,
     per_group_limit=50,
+    per_bot_limit=5,
 ):
     return TelegramService(
         follow_up_probability=follow_up_probability,
@@ -47,6 +48,7 @@ def _make_telegram_service(
         rate_limiter=rate_limiter or AsyncMock(spec=RateLimiter),
         per_user_limit=per_user_limit,
         per_group_limit=per_group_limit,
+        per_bot_limit=per_bot_limit,
         logger=logging.getLogger("test"),
     )
 
@@ -104,7 +106,7 @@ async def test_find_or_create_member_existing():
     member_repo.find_by_tg_and_group_id.return_value = existing
 
     service = _make_telegram_service(member_repo=member_repo)
-    result = await service.find_or_create_member(100, 1, "John", "johndoe")
+    result = await service.find_or_create_member(100, 1, "John", "johndoe", False)
 
     assert result == existing
     member_repo.update_member_info.assert_called_once()
@@ -118,7 +120,7 @@ async def test_find_or_create_member_new():
     member_repo.create.return_value = created
 
     service = _make_telegram_service(member_repo=member_repo)
-    result = await service.find_or_create_member(100, 1, "John", "johndoe")
+    result = await service.find_or_create_member(100, 1, "John", "johndoe", False)
 
     member_repo.create.assert_called_once()
     call_arg = member_repo.create.call_args[0][0]
@@ -790,7 +792,7 @@ async def test_find_or_create_member_unchanged_no_update():
     member_repo.find_by_tg_and_group_id.return_value = existing
 
     service = _make_telegram_service(member_repo=member_repo)
-    result = await service.find_or_create_member(100, 1, "John", "johndoe")
+    result = await service.find_or_create_member(100, 1, "John", "johndoe", False)
 
     assert result == existing
     member_repo.update_member_info.assert_not_called()
@@ -849,3 +851,153 @@ async def test_handle_incoming_reply_probability_zero():
 
     task_queue.queue_reply_to_message.assert_not_called()
 
+
+@pytest.mark.asyncio
+async def test_handle_incoming_bot_trigger_rate_limited():
+    group_repo = AsyncMock()
+    message_repo = AsyncMock()
+    member_repo = AsyncMock()
+    telegram_bot = AsyncMock(spec=TelegramBotPort)
+    rate_limiter = AsyncMock(spec=RateLimiter)
+    task_queue = AsyncMock(spec=TaskQueue)
+
+    group = make_group(telegram_group_id=1)
+    group_repo.find_by_tg_id.return_value = group
+    member_repo.find_by_tg_and_group_id.return_value = make_group_member(
+        telegram_group_member_id=5, is_bot=True
+    )
+    message_repo.create.return_value = make_message(telegram_message_id=42)
+    rate_limiter.check.side_effect = InternalRateLimitError("bot rate limited")
+
+    service = _make_telegram_service(
+        group_repo=group_repo,
+        message_repo=message_repo,
+        member_repo=member_repo,
+        telegram_bot=telegram_bot,
+        rate_limiter=rate_limiter,
+        task_queue=task_queue,
+    )
+    dto = make_telegram_message(
+        message_text="hey @mybot",
+        user_is_bot=True,
+    )
+    await service.handle_incoming_group_message(dto, "mybot")
+
+    task_queue.queue_reply_to_message.assert_not_called()
+    send_call = telegram_bot.send_message.call_args
+    assert send_call[1]["text"] == BOT_RATE_LIMITED.format(bot_name="Test")
+    assert send_call[1].get("reply_to_message_id") is None
+
+
+@pytest.mark.asyncio
+async def test_handle_incoming_bot_random_rate_limited_silent():
+    group_repo = AsyncMock()
+    message_repo = AsyncMock()
+    member_repo = AsyncMock()
+    telegram_bot = AsyncMock(spec=TelegramBotPort)
+    rate_limiter = AsyncMock(spec=RateLimiter)
+    task_queue = AsyncMock(spec=TaskQueue)
+
+    group = make_group(telegram_group_id=1)
+    group_repo.find_by_tg_id.return_value = group
+    member_repo.find_by_tg_and_group_id.return_value = make_group_member(
+        telegram_group_member_id=5, is_bot=True
+    )
+    message_repo.create.return_value = make_message(telegram_message_id=42)
+    rate_limiter.check.side_effect = InternalRateLimitError("bot rate limited")
+
+    service = _make_telegram_service(
+        group_repo=group_repo,
+        message_repo=message_repo,
+        member_repo=member_repo,
+        telegram_bot=telegram_bot,
+        rate_limiter=rate_limiter,
+        task_queue=task_queue,
+        reply_probability=0.5,
+    )
+    dto = make_telegram_message(message_text="hello world", user_is_bot=True)
+
+    with patch("src.application.services.telegram_service.random.random", return_value=0.1):
+        await service.handle_incoming_group_message(dto, "mybot")
+
+    task_queue.queue_reply_to_message.assert_not_called()
+    telegram_bot.send_message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_incoming_bot_not_rate_limited():
+    group_repo = AsyncMock()
+    message_repo = AsyncMock()
+    member_repo = AsyncMock()
+    task_queue = AsyncMock(spec=TaskQueue)
+
+    group = make_group(telegram_group_id=1)
+    group_repo.find_by_tg_id.return_value = group
+    member_repo.find_by_tg_and_group_id.return_value = make_group_member(
+        telegram_group_member_id=5, is_bot=True
+    )
+    message_repo.create.return_value = make_message(telegram_message_id=42)
+
+    service = _make_telegram_service(
+        group_repo=group_repo,
+        message_repo=message_repo,
+        member_repo=member_repo,
+        task_queue=task_queue,
+    )
+    dto = make_telegram_message(
+        message_text="hey @mybot",
+        user_is_bot=True,
+    )
+    await service.handle_incoming_group_message(dto, "mybot")
+
+    task_queue.queue_reply_to_message.assert_called_once_with(42)
+
+
+@pytest.mark.asyncio
+async def test_handle_incoming_human_skips_bot_rate_limit():
+    group_repo = AsyncMock()
+    message_repo = AsyncMock()
+    member_repo = AsyncMock()
+    rate_limiter = AsyncMock(spec=RateLimiter)
+    task_queue = AsyncMock(spec=TaskQueue)
+
+    group = make_group(telegram_group_id=1)
+    group_repo.find_by_tg_id.return_value = group
+    member_repo.find_by_tg_and_group_id.return_value = make_group_member(
+        telegram_group_member_id=5, is_bot=False
+    )
+    message_repo.create.return_value = make_message(telegram_message_id=42)
+
+    service = _make_telegram_service(
+        group_repo=group_repo,
+        message_repo=message_repo,
+        member_repo=member_repo,
+        rate_limiter=rate_limiter,
+        task_queue=task_queue,
+    )
+    dto = make_telegram_message(
+        message_text="hey @mybot",
+        user_is_bot=False,
+    )
+    await service.handle_incoming_group_message(dto, "mybot")
+
+    task_queue.queue_reply_to_message.assert_called_once_with(42)
+    rate_limiter.check.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_find_or_create_member_updates_is_bot():
+    member_repo = AsyncMock()
+    existing = make_group_member(
+        telegram_group_member_id=5,
+        tg_id=100,
+        first_name="Mira",
+        username="mira",
+        is_bot=False,
+    )
+    member_repo.find_by_tg_and_group_id.return_value = existing
+
+    service = _make_telegram_service(member_repo=member_repo)
+    result = await service.find_or_create_member(100, 1, "Mira", "mira", True)
+
+    member_repo.update_member_info.assert_called_once_with(5, "Mira", "mira", True)

@@ -20,6 +20,7 @@ class Settings(NamedTuple):
     rate_limits_cleanup_window_hours: int
     per_user_replies_per_hour: int
     per_group_replies_per_day: int
+    per_bot_replies_per_hour: int
     global_api_calls_per_day: int
     message_limit: int
     max_trends_for_context: int
@@ -88,6 +89,9 @@ def load_settings(config_path: Path | None = None) -> Settings:
         ),
         per_group_replies_per_day=config.getint(
             "rate_limits", "per_group_replies_per_day", fallback=200
+        ),
+        per_bot_replies_per_hour=config.getint(
+            "rate_limits", "per_bot_replies_per_hour", fallback=5
         ),
         global_api_calls_per_day=config.getint(
             "rate_limits", "global_api_calls_per_day", fallback=1000

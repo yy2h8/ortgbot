@@ -7,7 +7,7 @@ from src.domain.entities import Group, GroupMember, Message
 from src.domain.services.message_sanitization import sanitize_for_ai_prompt
 from src.domain.services.suitability import evaluate_reply_suitability
 from src.domain.exceptions import InternalRateLimitError
-from src.domain.constants.bot_messages import RATE_LIMITED, GROUP_GREETING
+from src.domain.constants.bot_messages import RATE_LIMITED, GROUP_GREETING, BOT_RATE_LIMITED
 from src.application.ports.task_queue import TaskQueue
 from src.application.ports.telegram_bot import TelegramBotPort
 from src.application.ports.telegram_group_member_repository import (
@@ -35,6 +35,7 @@ class TelegramService:
         rate_limiter: RateLimiter,
         per_user_limit: int,
         per_group_limit: int,
+        per_bot_limit: int,
         logger: logging.Logger,
     ):
         self.follow_up_probability = follow_up_probability
@@ -50,6 +51,7 @@ class TelegramService:
         self.rate_limiter = rate_limiter
         self.per_user_limit = per_user_limit
         self.per_group_limit = per_group_limit
+        self.per_bot_limit = per_bot_limit
         self.logger = logger
 
     async def find_or_create_group(self, tg_id: int, title: str) -> Group:
@@ -74,6 +76,7 @@ class TelegramService:
         telegram_group_id: int,
         first_name: str,
         username: str | None,
+        is_bot: bool,
     ) -> GroupMember:
         member = await self.member_repo.find_by_tg_and_group_id(
             tg_id, telegram_group_id
@@ -85,14 +88,20 @@ class TelegramService:
                     tg_id=tg_id,
                     first_name=first_name,
                     username=username,
+                    is_bot=is_bot,
                 )
             )
         else:
-            if member.first_name != first_name or member.username != username:
+            if (
+                member.first_name != first_name
+                or member.username != username
+                or member.is_bot != is_bot
+            ):
                 await self.member_repo.update_member_info(
                     member.telegram_group_member_id,
                     first_name,
                     username,
+                    is_bot,
                 )
         return member
 
@@ -105,6 +114,7 @@ class TelegramService:
             group.telegram_group_id,
             dto.user_first_name,
             dto.user_username,
+            dto.user_is_bot,
         )
 
         sanitized_text = sanitize_for_ai_prompt(dto.message_text, group.trigger_word)
@@ -143,6 +153,23 @@ class TelegramService:
         )
 
         if should_reply:
+            if dto.user_is_bot:
+                try:
+                    await self.rate_limiter.check(
+                        key=f"bot_replies:{group.telegram_group_id}:{member.telegram_group_member_id}",
+                        limit=self.per_bot_limit,
+                        window=timedelta(hours=1),
+                    )
+                except InternalRateLimitError as e:
+                    self.logger.warning(
+                        f"Bot rate limit exceeded for bot {member.telegram_group_member_id} in group {group.telegram_group_id}: {str(e)}"
+                    )
+                    await self.telegram_bot.send_message(
+                        chat_id=group.tg_id,
+                        text=BOT_RATE_LIMITED
+                    )
+                    return
+
             self.logger.info(
                 f"Message needs reply - triggering bot reply for message {message.telegram_message_id}"
             )
@@ -152,6 +179,16 @@ class TelegramService:
             and sanitized_text
             and random.random() < self.reply_probability
         ):
+            if dto.user_is_bot:
+                try:
+                    await self.rate_limiter.check(
+                        key=f"bot_replies:{group.telegram_group_id}:{member.telegram_group_member_id}",
+                        limit=self.per_bot_limit,
+                        window=timedelta(hours=1),
+                    )
+                except InternalRateLimitError:
+                    return
+
             self.logger.info(
                 f"Message {message.telegram_message_id} randomly selected for reply"
             )
