@@ -29,6 +29,9 @@ rate_limits_cleanup_window_hours = 24
 per_user_replies_per_hour = 20
 per_group_replies_per_day = 200
 
+# Max replies to the same bot per group per hour (optional - default shown)
+per_bot_replies_per_hour = 5
+
 # Maximum API calls per day (optional - default shown)
 global_api_calls_per_day = 1000
 

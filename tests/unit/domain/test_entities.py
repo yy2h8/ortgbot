@@ -41,6 +41,7 @@ def test_create_request_auto_fills_created_at():
 def test_create_group_member_auto_fills_has_left_group():
     member = make_group_member()
     assert member.has_left_group is False
+    assert member.is_bot is False
 
 
 def test_create_group_member_auto_fills_timestamps():

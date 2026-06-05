@@ -52,6 +52,7 @@ class TelegramGroupMemberRepository(ABC):
         telegram_group_member_id: int,
         first_name: str,
         username: str | None,
+        is_bot: bool,
     ) -> None:
         """Update member profile information.
 
@@ -59,6 +60,7 @@ class TelegramGroupMemberRepository(ABC):
             telegram_group_member_id: Internal member identifier
             first_name: User's first name
             username: User's username (optional)
+            is_bot: Whether the member is a bot
         """
         raise NotImplementedError("Method 'update_member_info' not implemented")
 

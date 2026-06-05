@@ -311,6 +311,7 @@ class TelegramServiceProvider(Provider):
             rate_limiter=rate_limiter,
             per_user_limit=settings.per_user_replies_per_hour,
             per_group_limit=settings.per_group_replies_per_day,
+            per_bot_limit=settings.per_bot_replies_per_hour,
             logger=_get_logger("telegram_service"),
         )
 

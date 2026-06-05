@@ -171,12 +171,15 @@ class AiosqliteTelegramMessageRepository(TelegramMessageRepository):
         async with self._db.get_connection() as conn:
             cursor = await conn.execute(
                 """
-                SELECT telegram_message_id, telegram_group_id, telegram_group_member_id,
-                       reply_to_message_id, tg_id, content, timestamp,
-                       is_reply_to_bot_message, is_generated, created_at
-                FROM telegram_messages
-                WHERE telegram_group_id = ? AND is_generated = 0
-                ORDER BY timestamp ASC
+                SELECT m.telegram_message_id, m.telegram_group_id, m.telegram_group_member_id,
+                       m.reply_to_message_id, m.tg_id, m.content, m.timestamp,
+                       m.is_reply_to_bot_message, m.is_generated, m.created_at
+                FROM telegram_messages m
+                LEFT JOIN telegram_group_members gm
+                    ON m.telegram_group_member_id = gm.telegram_group_member_id
+                WHERE m.telegram_group_id = ? AND m.is_generated = 0
+                    AND (gm.is_bot IS NULL OR gm.is_bot = 0)
+                ORDER BY m.timestamp ASC
                 """,
                 (group_id,),
             )
@@ -232,10 +235,13 @@ class AiosqliteTelegramMessageRepository(TelegramMessageRepository):
         async with self._db.get_connection() as conn:
             cursor = await conn.execute(
                 f"""
-                SELECT telegram_group_id, COUNT(*) AS count
-                FROM telegram_messages
-                WHERE telegram_group_id IN ({placeholders}) AND is_generated = 0
-                GROUP BY telegram_group_id
+                SELECT m.telegram_group_id, COUNT(*) AS count
+                FROM telegram_messages m
+                LEFT JOIN telegram_group_members gm
+                    ON m.telegram_group_member_id = gm.telegram_group_member_id
+                WHERE m.telegram_group_id IN ({placeholders}) AND m.is_generated = 0
+                    AND (gm.is_bot IS NULL OR gm.is_bot = 0)
+                GROUP BY m.telegram_group_id
                 """,
                 telegram_group_ids,
             )

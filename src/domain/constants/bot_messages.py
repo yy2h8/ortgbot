@@ -41,3 +41,5 @@ PERSONA_UPDATE_FAILED = "Failed to update persona. Please try again later."
 
 NOT_GROUP_ADMIN = "This command can only be used by group administrators."
 GROUP_NOT_FOUND = "Group not found. Please try again later."
+
+BOT_RATE_LIMITED = "I need a break from this bot"

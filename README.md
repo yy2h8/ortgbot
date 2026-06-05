@@ -136,6 +136,7 @@ Current defaults from code:
 | `rate_limits_cleanup_window_hours` | `24` | How old rate limit entries should be for cleanup |
 | `per_user_replies_per_hour` | `20` | Abuse preventing per user reply limit |
 | `per_group_replies_per_day` | `200` | Daily per group reply limit |
+| `per_bot_replies_per_hour` | `5` | Max replies to the same bot per group per hour |
 | `global_api_calls_per_day` | `1000` | Global api calls rate limit for cost control |
 | `message_limit` | `30` | Number of messages required for a full trend analysis. Indirectly controls maximum number of messages stored per group. |
 | `max_trends_for_context` | `5` | Number of trends required for a full context analysis |
