@@ -4,13 +4,15 @@ from unittest.mock import AsyncMock
 
 from src.application.services.message_generation_service import MessageGenerationService
 from src.application.services.ai_service import AIService
-from src.domain.constants.defaults import PROMPT_MESSAGE_MAX_LENGTH, DEFAULT_PERSONA
+from src.domain.dto import ConversationPrompt
+from src.domain.constants.defaults import DEFAULT_PERSONA
 from tests.conftest import (
     make_group,
     make_message,
     make_group_trend,
     make_group_context,
     make_openrouter_response,
+    make_conversation_prompt,
 )
 
 
@@ -54,7 +56,7 @@ async def test_reply_to_message_happy_path():
         trend=trend,
         context=context,
     )
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(content="nice goal")
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(content="nice goal")
 
     service = _make_service(
         ai_service=ai_service,
@@ -68,13 +70,12 @@ async def test_reply_to_message_happy_path():
     result = await service.reply_to_message(group, message)
 
     assert result == "nice goal"
-    ai_service.request_with_paid_fallback.assert_called_once()
-    call_kwargs = ai_service.request_with_paid_fallback.call_args[1]
+    ai_service.chat_request_with_paid_fallback.assert_called_once()
+    call_kwargs = ai_service.chat_request_with_paid_fallback.call_args[1]
     assert call_kwargs["free_model_id"] == "free/model"
     assert call_kwargs["paid_model_id"] == "paid/model"
     assert call_kwargs["group_id"] == 10
-    assert call_kwargs["max_tokens"] == MessageGenerationService.MAX_TOKENS
-    assert call_kwargs["temperature"] == MessageGenerationService.TEMPERATURE
+    assert isinstance(call_kwargs["prompt"], ConversationPrompt)
 
 
 @pytest.mark.asyncio
@@ -85,7 +86,7 @@ async def test_reply_to_message_persona_fallback():
     context_repo = AsyncMock()
 
     _setup_context_mocks(message_repo, trend_repo, context_repo)
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(content="hey")
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(content="hey")
 
     service = _make_service(
         ai_service=ai_service,
@@ -98,7 +99,7 @@ async def test_reply_to_message_persona_fallback():
 
     await service.reply_to_message(group, message)
 
-    prompt = ai_service.request_with_paid_fallback.call_args[1]["prompt"]
+    prompt = ai_service.chat_request_with_paid_fallback.call_args[1]["prompt"]
     assert DEFAULT_PERSONA in prompt.system
 
 
@@ -110,7 +111,7 @@ async def test_reply_to_message_custom_persona():
     context_repo = AsyncMock()
 
     _setup_context_mocks(message_repo, trend_repo, context_repo)
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(content="yo")
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(content="yo")
 
     service = _make_service(
         ai_service=ai_service,
@@ -123,36 +124,9 @@ async def test_reply_to_message_custom_persona():
 
     await service.reply_to_message(group, message)
 
-    prompt = ai_service.request_with_paid_fallback.call_args[1]["prompt"]
+    prompt = ai_service.chat_request_with_paid_fallback.call_args[1]["prompt"]
     assert "sarcastic nerd" in prompt.system
     assert DEFAULT_PERSONA not in prompt.system
-
-
-@pytest.mark.asyncio
-async def test_reply_to_message_content_truncated():
-    ai_service = AsyncMock(spec=AIService)
-    message_repo = AsyncMock()
-    trend_repo = AsyncMock()
-    context_repo = AsyncMock()
-
-    _setup_context_mocks(message_repo, trend_repo, context_repo)
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(content="ok")
-
-    service = _make_service(
-        ai_service=ai_service,
-        message_repo=message_repo,
-        trend_repo=trend_repo,
-        context_repo=context_repo,
-    )
-    group = make_group(telegram_group_id=10)
-    long_content = "x" * (PROMPT_MESSAGE_MAX_LENGTH + 50)
-    message = make_message(telegram_message_id=1, content=long_content)
-
-    await service.reply_to_message(group, message)
-
-    prompt = ai_service.request_with_paid_fallback.call_args[1]["prompt"]
-    assert "xxx..." in prompt.user
-    assert long_content not in prompt.user
 
 
 @pytest.mark.asyncio
@@ -163,7 +137,7 @@ async def test_reply_to_message_strips_outer_quotes():
     context_repo = AsyncMock()
 
     _setup_context_mocks(message_repo, trend_repo, context_repo)
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(
         content='"quoted response"'
     )
 
@@ -189,7 +163,7 @@ async def test_reply_to_message_no_outer_quotes_unchanged():
     context_repo = AsyncMock()
 
     _setup_context_mocks(message_repo, trend_repo, context_repo)
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(
         content="plain response"
     )
 
@@ -216,13 +190,13 @@ async def test_follow_up_message_happy_path():
 
     trend = make_group_trend(recent_trends_text="discussing movies")
     context = make_group_context(context_text="movie buffs")
-    _setup_context_mobs = _setup_context_mocks(
+    _setup_context_mocks(
         message_repo, trend_repo, context_repo,
         messages=[make_message(telegram_message_id=1, content="original")],
         trend=trend,
         context=context,
     )
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(
         content="also the soundtrack was great"
     )
 
@@ -238,11 +212,56 @@ async def test_follow_up_message_happy_path():
     result = await service.follow_up_message(group, original)
 
     assert result == "also the soundtrack was great"
-    ai_service.request_with_paid_fallback.assert_called_once()
-    call_kwargs = ai_service.request_with_paid_fallback.call_args[1]
+    ai_service.chat_request_with_paid_fallback.assert_called_once()
+    call_kwargs = ai_service.chat_request_with_paid_fallback.call_args[1]
     assert call_kwargs["group_id"] == 10
-    assert call_kwargs["max_tokens"] == MessageGenerationService.MAX_TOKENS
-    assert call_kwargs["temperature"] == MessageGenerationService.TEMPERATURE
+    assert isinstance(call_kwargs["prompt"], ConversationPrompt)
+
+
+@pytest.mark.asyncio
+async def test_follow_up_message_uses_bot_message_as_last_assistant_turn():
+    ai_service = AsyncMock(spec=AIService)
+    message_repo = AsyncMock()
+    trend_repo = AsyncMock()
+    context_repo = AsyncMock()
+
+    bot_message = make_message(
+        telegram_message_id=2,
+        telegram_group_member_id=None,
+        is_generated=True,
+        content="that movie ending was cheap",
+        reply_to_message_id=1,
+    )
+    _setup_context_mocks(
+        message_repo,
+        trend_repo,
+        context_repo,
+        messages=[
+            make_message(telegram_message_id=1, telegram_group_member_id=5, content="hot take"),
+            bot_message,
+        ],
+        trend=make_group_trend(recent_trends_text="movie debate"),
+        context=make_group_context(context_text="film club"),
+    )
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(
+        content="and the pacing was worse"
+    )
+
+    service = _make_service(
+        ai_service=ai_service,
+        message_repo=message_repo,
+        trend_repo=trend_repo,
+        context_repo=context_repo,
+    )
+    group = make_group(telegram_group_id=10, persona="movie nerd")
+
+    await service.follow_up_message(group, bot_message)
+
+    prompt = ai_service.chat_request_with_paid_fallback.call_args[1]["prompt"]
+    assert prompt.messages[-1] == {
+        "role": "assistant",
+        "content": "[msg_2] that movie ending was cheap",
+    }
 
 
 @pytest.mark.asyncio
@@ -253,7 +272,7 @@ async def test_follow_up_message_persona_fallback():
     context_repo = AsyncMock()
 
     _setup_context_mocks(message_repo, trend_repo, context_repo)
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(content="hmm")
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(content="hmm")
 
     service = _make_service(
         ai_service=ai_service,
@@ -266,35 +285,8 @@ async def test_follow_up_message_persona_fallback():
 
     await service.follow_up_message(group, original)
 
-    prompt = ai_service.request_with_paid_fallback.call_args[1]["prompt"]
+    prompt = ai_service.chat_request_with_paid_fallback.call_args[1]["prompt"]
     assert DEFAULT_PERSONA in prompt.system
-
-
-@pytest.mark.asyncio
-async def test_follow_up_message_original_truncated():
-    ai_service = AsyncMock(spec=AIService)
-    message_repo = AsyncMock()
-    trend_repo = AsyncMock()
-    context_repo = AsyncMock()
-
-    _setup_context_mocks(message_repo, trend_repo, context_repo)
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(content="right")
-
-    service = _make_service(
-        ai_service=ai_service,
-        message_repo=message_repo,
-        trend_repo=trend_repo,
-        context_repo=context_repo,
-    )
-    group = make_group(telegram_group_id=10)
-    long_content = "y" * (PROMPT_MESSAGE_MAX_LENGTH + 50)
-    original = make_message(telegram_message_id=1, content=long_content)
-
-    await service.follow_up_message(group, original)
-
-    prompt = ai_service.request_with_paid_fallback.call_args[1]["prompt"]
-    assert "yyy..." in prompt.user
-    assert long_content not in prompt.user
 
 
 @pytest.mark.asyncio
@@ -309,7 +301,7 @@ async def test_follow_up_message_no_trend_uses_fallback():
         trend=None,
         context=make_group_context(context_text="some context"),
     )
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(content="ok")
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(content="ok")
 
     service = _make_service(
         ai_service=ai_service,
@@ -322,8 +314,8 @@ async def test_follow_up_message_no_trend_uses_fallback():
 
     await service.follow_up_message(group, original)
 
-    prompt = ai_service.request_with_paid_fallback.call_args[1]["prompt"]
-    assert "[No recent trends available]" in prompt.user
+    prompt = ai_service.chat_request_with_paid_fallback.call_args[1]["prompt"]
+    assert "[No recent trends available]" in prompt.system
 
 
 @pytest.mark.asyncio
@@ -338,7 +330,7 @@ async def test_follow_up_message_no_context_uses_fallback():
         trend=make_group_trend(recent_trends_text="some trend"),
         context=None,
     )
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(content="ok")
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(content="ok")
 
     service = _make_service(
         ai_service=ai_service,
@@ -351,8 +343,8 @@ async def test_follow_up_message_no_context_uses_fallback():
 
     await service.follow_up_message(group, original)
 
-    prompt = ai_service.request_with_paid_fallback.call_args[1]["prompt"]
-    assert "[No context available]" in prompt.user
+    prompt = ai_service.chat_request_with_paid_fallback.call_args[1]["prompt"]
+    assert "[No context available]" in prompt.system
 
 
 @pytest.mark.asyncio
@@ -406,6 +398,31 @@ async def test_prepare_context_no_messages_raises():
 
 
 @pytest.mark.asyncio
+async def test_prepare_context_no_visible_messages_raises():
+    message_repo = AsyncMock()
+    trend_repo = AsyncMock()
+    context_repo = AsyncMock()
+
+    message_repo.get_replies_for_message.return_value = [
+        make_message(telegram_message_id=1, content="   "),
+        make_message(telegram_message_id=2, content="\t\n"),
+    ]
+    trend_repo.find_latest_for_group.return_value = None
+    context_repo.find_for_group.return_value = None
+
+    service = _make_service(
+        message_repo=message_repo,
+        trend_repo=trend_repo,
+        context_repo=context_repo,
+    )
+    group = make_group(telegram_group_id=10)
+    target = make_message(telegram_message_id=5)
+
+    with pytest.raises(Exception, match="No visible messages found for group 10"):
+        await service._prepare_context(group, target)
+
+
+@pytest.mark.asyncio
 async def test_prepare_context_trend_and_context_both_present():
     message_repo = AsyncMock()
     trend_repo = AsyncMock()
@@ -432,83 +449,79 @@ async def test_prepare_context_trend_and_context_both_present():
 
     assert formatted_trend == "gaming talk"
     assert formatted_context == "gamer group"
-    assert "msg" in conversation
+    assert "msg" in conversation[0]["content"]
 
 
 @pytest.mark.asyncio
-async def test_make_ai_request_both_models_uses_fallback():
+async def test_make_ai_chat_request_both_models_uses_fallback():
     ai_service = AsyncMock(spec=AIService)
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response()
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response()
 
     service = _make_service(
         ai_service=ai_service,
         free_model_id="free/model",
         paid_model_id="paid/model",
     )
-    from src.domain.dto import Prompt
-    prompt = Prompt(system="sys", user="usr")
+    prompt = make_conversation_prompt()
 
-    await service._make_ai_request(prompt=prompt, group_id=5)
+    await service._make_ai_chat_request(prompt=prompt, group_id=5)
 
-    ai_service.request_with_paid_fallback.assert_called_once()
-    ai_service.request.assert_not_called()
+    ai_service.chat_request_with_paid_fallback.assert_called_once()
+    ai_service.chat_request.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_make_ai_request_only_free_model():
+async def test_make_ai_chat_request_only_free_model():
     ai_service = AsyncMock(spec=AIService)
-    ai_service.request.return_value = make_openrouter_response()
+    ai_service.chat_request.return_value = make_openrouter_response()
 
     service = _make_service(
         ai_service=ai_service,
         free_model_id="free/model",
         paid_model_id=None,
     )
-    from src.domain.dto import Prompt
-    prompt = Prompt(system="sys", user="usr")
+    prompt = make_conversation_prompt()
 
-    await service._make_ai_request(prompt=prompt, group_id=5)
+    await service._make_ai_chat_request(prompt=prompt, group_id=5)
 
-    ai_service.request.assert_called_once()
-    call_kwargs = ai_service.request.call_args[1]
+    ai_service.chat_request.assert_called_once()
+    call_kwargs = ai_service.chat_request.call_args[1]
     assert call_kwargs["model_id"] == "free/model"
 
 
 @pytest.mark.asyncio
-async def test_make_ai_request_only_paid_model():
+async def test_make_ai_chat_request_only_paid_model():
     ai_service = AsyncMock(spec=AIService)
-    ai_service.request.return_value = make_openrouter_response()
+    ai_service.chat_request.return_value = make_openrouter_response()
 
     service = _make_service(
         ai_service=ai_service,
         free_model_id=None,
         paid_model_id="paid/model",
     )
-    from src.domain.dto import Prompt
-    prompt = Prompt(system="sys", user="usr")
+    prompt = make_conversation_prompt()
 
-    await service._make_ai_request(prompt=prompt, group_id=5)
+    await service._make_ai_chat_request(prompt=prompt, group_id=5)
 
-    ai_service.request.assert_called_once()
-    call_kwargs = ai_service.request.call_args[1]
+    ai_service.chat_request.assert_called_once()
+    call_kwargs = ai_service.chat_request.call_args[1]
     assert call_kwargs["model_id"] == "paid/model"
 
 
 @pytest.mark.asyncio
-async def test_make_ai_request_neither_model():
+async def test_make_ai_chat_request_neither_model():
     ai_service = AsyncMock(spec=AIService)
-    ai_service.request.return_value = make_openrouter_response()
+    ai_service.chat_request.return_value = make_openrouter_response()
 
     service = _make_service(
         ai_service=ai_service,
         free_model_id=None,
         paid_model_id=None,
     )
-    from src.domain.dto import Prompt
-    prompt = Prompt(system="sys", user="usr")
+    prompt = make_conversation_prompt()
 
-    await service._make_ai_request(prompt=prompt, group_id=5)
+    await service._make_ai_chat_request(prompt=prompt, group_id=5)
 
-    ai_service.request.assert_called_once()
-    call_kwargs = ai_service.request.call_args[1]
+    ai_service.chat_request.assert_called_once()
+    call_kwargs = ai_service.chat_request.call_args[1]
     assert call_kwargs["model_id"] is None

@@ -54,6 +54,61 @@ def _create_message_id_mapping(messages: Sequence[Message]) -> Mapping[int, str]
     return message_id_mapping
 
 
+def build_conversation_messages(
+    messages: Sequence[Message],
+) -> list[dict[str, str]]:
+    """Convert a sequence of Message entities into an OpenRouter messages array.
+
+    Bot-generated messages become {"role": "assistant", "content": ...}.
+    Human messages become {"role": "user", "content": "[user_N]: ..."}.
+    Reply markers are preserved in the content string.
+    Blank/None content is filtered out.
+    Each content string is truncated via truncate_for_prompt().
+    """
+    visible_messages = [msg for msg in messages if msg.content and msg.content.strip()]
+
+    if not visible_messages:
+        return []
+
+    user_mapping = _create_user_mapping(visible_messages)
+    message_id_mapping = _create_message_id_mapping(visible_messages)
+    message_lookup: Dict[int, Message] = {
+        msg.telegram_message_id: msg for msg in visible_messages
+    }
+
+    result: list[dict[str, str]] = []
+    for message in visible_messages:
+        truncated_content = truncate_for_prompt(message.content)
+        msg_id = message_id_mapping[message.telegram_message_id]
+
+        if message.is_generated:
+            role = "assistant"
+            content = f"[{msg_id}] {truncated_content}"
+        else:
+            role = "user"
+            speaker = user_mapping.get(
+                message.telegram_group_member_id, "unknown_user"
+            )
+            if (
+                bool(message.reply_to_message_id)
+                and message.reply_to_message_id is not None
+                and message.reply_to_message_id in message_lookup
+            ):
+                replied_message_id = message_id_mapping.get(
+                    message.reply_to_message_id, "unknown"
+                )
+                content = (
+                    f"[{msg_id}] [{speaker}] (replying to [{replied_message_id}]): "
+                    f"{truncated_content}"
+                )
+            else:
+                content = f"[{msg_id}] [{speaker}]: {truncated_content}"
+
+        result.append({"role": role, "content": content})
+
+    return result
+
+
 def _format_single_message(
     message: Message,
     user_mapping: Mapping[int, str],

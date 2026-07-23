@@ -178,6 +178,7 @@ class AiosqliteTelegramMessageRepository(TelegramMessageRepository):
                 LEFT JOIN telegram_group_members gm
                     ON m.telegram_group_member_id = gm.telegram_group_member_id
                 WHERE m.telegram_group_id = ? AND m.is_generated = 0
+                    AND TRIM(COALESCE(m.content, '')) != ''
                     AND (gm.is_bot IS NULL OR gm.is_bot = 0)
                 ORDER BY m.timestamp ASC
                 """,
@@ -240,6 +241,7 @@ class AiosqliteTelegramMessageRepository(TelegramMessageRepository):
                 LEFT JOIN telegram_group_members gm
                     ON m.telegram_group_member_id = gm.telegram_group_member_id
                 WHERE m.telegram_group_id IN ({placeholders}) AND m.is_generated = 0
+                    AND TRIM(COALESCE(m.content, '')) != ''
                     AND (gm.is_bot IS NULL OR gm.is_bot = 0)
                 GROUP BY m.telegram_group_id
                 """,

@@ -1,12 +1,14 @@
 from typing import NamedTuple
 
-from src.domain.dto import Prompt
+from src.domain.dto import Prompt, ConversationPrompt
 
 
 class PromptTemplate(NamedTuple):
     system_template: str
     user_template: str
     template_vars: list[str]
+    temperature: float
+    max_tokens: int
 
     def render(self, **kwargs) -> Prompt:
         missing = [
@@ -20,6 +22,31 @@ class PromptTemplate(NamedTuple):
         return Prompt(
             system=self.system_template.format_map(kwargs),
             user=self.user_template.format_map(kwargs),
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+
+
+class ConversationPromptTemplate(NamedTuple):
+    system_template: str
+    template_vars: list[str]
+    temperature: float
+    max_tokens: int
+
+    def render(self, messages: list[dict[str, str]], **kwargs) -> ConversationPrompt:
+        missing = [
+            var
+            for var in self.template_vars
+            if var not in kwargs or kwargs[var] is None
+        ]
+        if missing:
+            raise ValueError(f"Missing required parameters: {', '.join(missing)}")
+
+        return ConversationPrompt(
+            system=self.system_template.format_map(kwargs),
+            messages=messages,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
         )
 
 
@@ -66,10 +93,12 @@ Describe:
 Write an updated overall profile of the group, focusing on enduring vibe and communication style in "{language}".
 Profile:""",
     template_vars=["language", "trends", "context"],
+    temperature=0.7,
+    max_tokens=600,
 )
 
 
-ANALYZE_TRENDS_TEMPLATE = PromptTemplate(
+ANALYZE_TRENDS_TEMPLATE = ConversationPromptTemplate(
     system_template="""You are a conversation analyst for a Telegram group.
 Your job is to identify the CURRENT active topics in the latest conversation slice in "{language}".
 
@@ -98,18 +127,19 @@ Prioritize what is most active in this snapshot, not what is generally true abou
 - If several topics appear, mention only the 1-3 most salient ones
 - If one topic dominates, focus mostly on that
 - If the chat is fragmented, describe the dominant pattern briefly
-- Be concrete, not abstract""",
-    user_template="""### CONVERSATION SNAPSHOT (chronological, newest last)
-{conversation}
+- Be concrete, not abstract
 
 ### TASK
-Summarize the active conversation trends in this snapshot and their emotional register in "{language}".
+The conversation snapshot follows chronologically, newest last.
+Summarize the active conversation trends and their emotional register in "{language}".
 Trends:""",
-    template_vars=["language", "conversation"],
+    template_vars=["language"],
+    temperature=0.7,
+    max_tokens=400,
 )
 
 
-REPLY_TO_MESSAGE_TEMPLATE = PromptTemplate(
+REPLY_TO_MESSAGE_TEMPLATE = ConversationPromptTemplate(
     system_template="""You are a real member of a Telegram group chat.
 You are not an assistant and not a bot.
 
@@ -120,18 +150,24 @@ Speak entirely as this character. Your vocabulary, tone, humor, and opinions all
 ### ROLEPLAY STYLE
 - Stay in character at all times — your reactions are this character's reactions, not a neutral observer's
 - Sound like a human sending a quick chat message
-- Match the energy of the target message
+- Match the energy of the last message
 - Be specific and natural, not polished
 - Slightly opinionated is good; preachy or performative is bad
 - If the message is a joke, play along or sharpen it
 - If the message is a question, answer directly
 - If the message is emotional, sound human and grounded
 
+### GROUP VIBE
+{context}
+
+### CURRENT TRENDS
+{recent_trend}
+
 ### USE OF CONTEXT
 - Use the group vibe only to match tone
-- Use recent trends only if they help interpret the target message
+- Use recent trends only if they help interpret the last message
 - Do not introduce unrelated history or topics
-- The reply must feel like a direct response to the target message
+- The reply must feel like a direct response to the last message
 
 ### HARD CONSTRAINTS
 - Write entirely in "{language}"
@@ -140,40 +176,30 @@ Speak entirely as this character. Your vocabulary, tone, humor, and opinions all
 - Do not mention usernames
 - Never say you are an AI or bot
 - 5-15 words maximum
-- One message only""",
-    user_template="""### GROUP VIBE
-{context}
-
-### CURRENT TRENDS
-{recent_trend}
-
-### RECENT HISTORY
-{conversation}
-
-### TARGET MESSAGE
-{message}
+- One message only
 
 ### TASK
-Write one short in-character reply to the target message in "{language}".
+The conversation history follows. Write one short in-character reply to the last message in "{language}".
 Reply:""",
-    template_vars=[
-        "language",
-        "persona",
-        "context",
-        "recent_trend",
-        "message",
-        "conversation",
-    ],
+    template_vars=["language", "persona", "context", "recent_trend"],
+    temperature=0.9,
+    max_tokens=100,
 )
 
 
-FOLLOW_UP_TEMPLATE = PromptTemplate(
+FOLLOW_UP_TEMPLATE = ConversationPromptTemplate(
     system_template="""You are a real Telegram group member adding a quick second thought after your last message.
 You are not a bot.
 
 ### YOUR CHARACTER
 You are: {persona}
 Your follow-up must come from the same character voice as your previous message — same vocabulary, same energy, same perspective.
+
+### GROUP VIBE
+{context}
+
+### CURRENT TRENDS
+{recent_trend}
 
 ### STYLE
 - Stay in character — this should sound like the same person who sent the previous message
@@ -188,28 +214,13 @@ Your follow-up must come from the same character voice as your previous message 
 - No quotes, prefixes, markdown, or emojis
 - 5-15 words maximum
 - One message only
-- Do not repeat wording or ideas from your previous message""",
-    user_template="""### GROUP VIBE
-{context}
-
-### CURRENT TRENDS
-{recent_trend}
-
-### RECENT HISTORY
-{conversation}
-
-### YOUR PREVIOUS MESSAGE
-{original_message}
+- Do not repeat wording or ideas from your previous message
 
 ### TASK
+The conversation history follows. Your previous message is the last assistant message.
 Write a natural follow-up that adds a small new angle in "{language}".
 Follow-up:""",
-    template_vars=[
-        "language",
-        "persona",
-        "context",
-        "recent_trend",
-        "conversation",
-        "original_message",
-    ],
+    template_vars=["language", "persona", "context", "recent_trend"],
+    temperature=0.9,
+    max_tokens=100,
 )

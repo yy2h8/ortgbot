@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from src.application.services.analytics_service import AnalyticsService
 from src.application.services.ai_service import AIService
+from src.domain.dto import ConversationPrompt, Prompt
 from src.domain.exceptions import InternalRateLimitError
 from tests.conftest import (
     make_group,
@@ -15,10 +16,16 @@ from tests.conftest import (
 
 
 def _capture_prompt(mock_ai_service):
-    call_kwargs = mock_ai_service.request_with_paid_fallback.call_args
-    if call_kwargs is None:
-        call_kwargs = mock_ai_service.request.call_args
-    return call_kwargs[1]["prompt"]
+    for method in (
+        "request_with_paid_fallback",
+        "request",
+        "chat_request_with_paid_fallback",
+        "chat_request",
+    ):
+        call = getattr(mock_ai_service, method).call_args
+        if call is not None:
+            return call[1]["prompt"]
+    raise AssertionError("No ai_service call captured")
 
 
 def _make_analytics_service(
@@ -50,7 +57,7 @@ async def test_analyze_trends_happy_path():
 
     messages = [make_message(content="hello"), make_message(content="world")]
     message_repo.get_all_messages_for_group_excluding_generated.return_value = messages
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(
         content="discussions about tech"
     )
 
@@ -78,12 +85,31 @@ async def test_analyze_trends_rate_limited():
     ai_service = AsyncMock(spec=AIService)
     message_repo = AsyncMock()
     message_repo.get_all_messages_for_group_excluding_generated.return_value = [make_message()]
-    ai_service.request_with_paid_fallback.side_effect = InternalRateLimitError("limited")
+    ai_service.chat_request_with_paid_fallback.side_effect = InternalRateLimitError("limited")
 
     service = _make_analytics_service(ai_service=ai_service, message_repo=message_repo)
     group = make_group(telegram_group_id=1, language="English")
     with pytest.raises(InternalRateLimitError):
         await service.analyze_trends(group)
+
+
+@pytest.mark.asyncio
+async def test_analyze_trends_no_visible_messages():
+    ai_service = AsyncMock(spec=AIService)
+    message_repo = AsyncMock()
+    message_repo.get_all_messages_for_group_excluding_generated.return_value = [
+        make_message(content="   "),
+        make_message(content="\t\n"),
+    ]
+
+    service = _make_analytics_service(ai_service=ai_service, message_repo=message_repo)
+    group = make_group(telegram_group_id=1, language="English")
+
+    with pytest.raises(Exception, match="No visible messages found for group 1"):
+        await service.analyze_trends(group)
+
+    ai_service.chat_request_with_paid_fallback.assert_not_called()
+    ai_service.chat_request.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -217,13 +243,13 @@ async def test_analyze_context_trends_count_in_result():
 
 
 @pytest.mark.asyncio
-async def test_analyze_trends_prompt_contains_language_and_conversation():
+async def test_analyze_trends_prompt_is_conversation_prompt_with_language_and_messages():
     ai_service = AsyncMock(spec=AIService)
     message_repo = AsyncMock()
     message_repo.get_all_messages_for_group_excluding_generated.return_value = [
         make_message(content="Python discussion")
     ]
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(
         content="trends"
     )
 
@@ -232,12 +258,13 @@ async def test_analyze_trends_prompt_contains_language_and_conversation():
     await service.analyze_trends(group)
 
     prompt = _capture_prompt(ai_service)
-    assert "Python discussion" in prompt.user
-    assert "French" in prompt.user
+    assert isinstance(prompt, ConversationPrompt)
+    assert "Python discussion" in prompt.messages[0]["content"]
+    assert "French" in prompt.system
 
 
 @pytest.mark.asyncio
-async def test_analyze_context_prompt_contains_language_trends_and_context():
+async def test_analyze_context_prompt_is_prompt_with_language_trends_and_context():
     ai_service = AsyncMock(spec=AIService)
     trend_repo = AsyncMock()
     context_repo = AsyncMock()
@@ -261,6 +288,7 @@ async def test_analyze_context_prompt_contains_language_trends_and_context():
     await service.analyze_context(group)
 
     prompt = _capture_prompt(ai_service)
+    assert isinstance(prompt, Prompt)
     assert "tech debates" in prompt.user
     assert "gaming community" in prompt.user
     assert "Spanish" in prompt.user
@@ -269,9 +297,9 @@ async def test_analyze_context_prompt_contains_language_trends_and_context():
 @pytest.mark.parametrize(
     "free_model_id,paid_model_id,expected_method",
     [
-        ("free/model", "paid/model", "request_with_paid_fallback"),
-        ("free/model", None, "request"),
-        (None, "paid/model", "request"),
+        ("free/model", "paid/model", "chat_request_with_paid_fallback"),
+        ("free/model", None, "chat_request"),
+        (None, "paid/model", "chat_request"),
     ],
 )
 @pytest.mark.asyncio
@@ -284,10 +312,10 @@ async def test_analyze_trends_ai_request_routing(
         make_message()
     ]
 
-    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(
         content="trends"
     )
-    ai_service.request.return_value = make_openrouter_response(content="trends")
+    ai_service.chat_request.return_value = make_openrouter_response(content="trends")
 
     service = _make_analytics_service(
         ai_service=ai_service,
@@ -297,5 +325,41 @@ async def test_analyze_trends_ai_request_routing(
     )
     group = make_group(telegram_group_id=1, language="English")
     await service.analyze_trends(group)
+
+    getattr(ai_service, expected_method).assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "free_model_id,paid_model_id,expected_method",
+    [
+        ("free/model", "paid/model", "request_with_paid_fallback"),
+        ("free/model", None, "request"),
+        (None, "paid/model", "request"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_analyze_context_ai_request_routing(
+    free_model_id, paid_model_id, expected_method
+):
+    ai_service = AsyncMock(spec=AIService)
+    trend_repo = AsyncMock()
+    context_repo = AsyncMock()
+    trend_repo.find_all_for_group.return_value = [make_group_trend()]
+    context_repo.find_for_group.return_value = None
+
+    ai_service.request_with_paid_fallback.return_value = make_openrouter_response(
+        content="ctx"
+    )
+    ai_service.request.return_value = make_openrouter_response(content="ctx")
+
+    service = _make_analytics_service(
+        ai_service=ai_service,
+        trend_repo=trend_repo,
+        context_repo=context_repo,
+        free_model_id=free_model_id,
+        paid_model_id=paid_model_id,
+    )
+    group = make_group(telegram_group_id=1, language="English")
+    await service.analyze_context(group)
 
     getattr(ai_service, expected_method).assert_called_once()

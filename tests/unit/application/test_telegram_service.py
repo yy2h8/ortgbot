@@ -474,6 +474,7 @@ async def test_follow_up_with_username():
     )
     await service.follow_up_message(2)
 
+    msg_gen.follow_up_message.assert_called_once_with(group, bot_msg)
     send_call = telegram_bot.send_message.call_args
     assert "@johndoe" in send_call[1]["text"]
 
