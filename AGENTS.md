@@ -354,7 +354,7 @@ All entities use `NamedTuple` with a `create()` factory classmethod. The optiona
   - `evaluate_context_suitability()` - enough trends for context analysis
   - `evaluate_reply_suitability()` - message triggers bot reply (reply, mention, or trigger word)
 - `message_sanitization.py`: `sanitize_for_ai_prompt()` - normalizes text, replaces PII (email/phone/URL), removes bot mentions and trigger words
-- `conversation_formatting.py`: `format_conversation_for_prompt()` - formats message list into anonymized conversation with `[msg_N] user_N: content` format
+- `conversation_formatting.py`: `build_conversation_messages()` - formats message list into OpenRouter messages array with `user_N (HH:MM): content` format for humans and bare text for bot messages
 - `formatting.py`: `truncate_for_prompt()` (max 300 chars), `strip_paired_quotes()`, `format_trends_for_prompt()`
 
 ---

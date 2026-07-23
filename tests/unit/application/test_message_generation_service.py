@@ -286,7 +286,7 @@ async def test_follow_up_message_uses_bot_message_as_last_assistant_turn():
     prompt = ai_service.chat_request_with_paid_fallback.call_args[1]["prompt"]
     assert prompt.messages[-1] == {
         "role": "assistant",
-        "content": "[msg_2] that movie ending was cheap",
+        "content": "that movie ending was cheap",
     }
 
 
