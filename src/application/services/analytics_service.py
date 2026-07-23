@@ -2,13 +2,13 @@ import asyncio
 import logging
 
 from src.domain.entities import GroupContext, GroupTrend, Group
-from src.domain.dto import OpenRouterResponse
+from src.domain.dto import OpenRouterResponse, ConversationPrompt, Prompt
 from src.domain.constants.prompt_templates import (
     ANALYZE_CONTEXT_TEMPLATE,
     ANALYZE_TRENDS_TEMPLATE,
 )
 from src.domain.services.formatting import format_trends_for_prompt
-from src.domain.services.conversation_formatting import format_conversation_for_prompt
+from src.domain.services.conversation_formatting import build_conversation_messages
 from src.domain.exceptions import InternalRateLimitError
 from src.application.services.ai_service import AIService
 from src.application.ports.group_trend_repository import GroupTrendRepository
@@ -17,8 +17,6 @@ from src.application.ports.telegram_message_repository import TelegramMessageRep
 
 
 class AnalyticsService:
-    TEMPERATURE = 0.7
-
     def __init__(
         self,
         ai_service: AIService,
@@ -41,8 +39,7 @@ class AnalyticsService:
 
     async def _make_ai_request(
         self,
-        prompt,
-        max_tokens: int,
+        prompt: Prompt,
         group_id: int,
     ) -> OpenRouterResponse:
         if self.free_model_id and self.paid_model_id:
@@ -51,16 +48,31 @@ class AnalyticsService:
                 paid_model_id=self.paid_model_id,
                 group_id=group_id,
                 prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=self.TEMPERATURE,
             )
         model_id = self.free_model_id or self.paid_model_id
         return await self.ai_service.request(
             model_id=model_id,
             group_id=group_id,
             prompt=prompt,
-            max_tokens=max_tokens,
-            temperature=self.TEMPERATURE,
+        )
+
+    async def _make_ai_chat_request(
+        self,
+        prompt: ConversationPrompt,
+        group_id: int,
+    ) -> OpenRouterResponse:
+        if self.free_model_id and self.paid_model_id:
+            return await self.ai_service.chat_request_with_paid_fallback(
+                free_model_id=self.free_model_id,
+                paid_model_id=self.paid_model_id,
+                group_id=group_id,
+                prompt=prompt,
+            )
+        model_id = self.free_model_id or self.paid_model_id
+        return await self.ai_service.chat_request(
+            model_id=model_id,
+            group_id=group_id,
+            prompt=prompt,
         )
 
     async def analyze_context(self, group: Group) -> GroupContext:
@@ -90,7 +102,6 @@ class AnalyticsService:
         try:
             response = await self._make_ai_request(
                 prompt=prompt,
-                max_tokens=600,
                 group_id=group.telegram_group_id,
             )
         except InternalRateLimitError as e:
@@ -115,17 +126,20 @@ class AnalyticsService:
         if not messages:
             raise Exception(f"No messages found for group {group.telegram_group_id}")
 
-        conversation = format_conversation_for_prompt(messages)
+        conversation_messages = build_conversation_messages(messages)
+        if not conversation_messages:
+            raise Exception(
+                f"No visible messages found for group {group.telegram_group_id}"
+            )
 
         prompt = ANALYZE_TRENDS_TEMPLATE.render(
+            messages=conversation_messages,
             language=group.language,
-            conversation=conversation,
         )
 
         try:
-            response = await self._make_ai_request(
+            response = await self._make_ai_chat_request(
                 prompt=prompt,
-                max_tokens=400,
                 group_id=group.telegram_group_id,
             )
         except InternalRateLimitError as e:

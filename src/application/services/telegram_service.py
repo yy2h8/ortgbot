@@ -295,7 +295,7 @@ class TelegramService:
 
         try:
             follow_up_text = await self.message_generation_service.follow_up_message(
-                group, original_message
+                group, bot_message
             )
         except InternalRateLimitError as e:
             self.logger.warning(

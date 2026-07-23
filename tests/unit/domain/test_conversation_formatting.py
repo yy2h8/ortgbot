@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
 
-from src.domain.services.conversation_formatting import format_conversation_for_prompt
+from src.domain.services.conversation_formatting import (
+    format_conversation_for_prompt,
+    build_conversation_messages,
+)
 from src.domain.constants.defaults import PROMPT_MESSAGE_MAX_LENGTH
 from tests.conftest import make_message
 
@@ -258,3 +261,155 @@ def test_format_conversation_human_replying_to_bot():
     assert len(lines) == 2
     assert "[msg_1] you: bot message" == lines[0]
     assert "[msg_2] user_1 (replying to [msg_1]): human reply" == lines[1]
+
+
+def test_build_conversation_messages_empty_list():
+    assert build_conversation_messages([]) == []
+
+
+def test_build_conversation_messages_single_human_message():
+    msg = make_message(
+        telegram_message_id=1,
+        telegram_group_member_id=10,
+        is_generated=False,
+        content="hello",
+    )
+    result = build_conversation_messages([msg])
+    assert result == [{"role": "user", "content": "[msg_1] [user_1]: hello"}]
+
+
+def test_build_conversation_messages_bot_message_is_assistant_without_prefix():
+    msg = make_message(
+        telegram_message_id=1,
+        telegram_group_member_id=None,
+        is_generated=True,
+        content="hi there",
+    )
+    result = build_conversation_messages([msg])
+    assert result == [{"role": "assistant", "content": "[msg_1] hi there"}]
+
+
+def test_build_conversation_messages_reply_marker_preserved():
+    msg1 = make_message(
+        telegram_message_id=1,
+        telegram_group_member_id=10,
+        is_generated=False,
+        content="original",
+    )
+    msg2 = make_message(
+        telegram_message_id=2,
+        telegram_group_member_id=20,
+        is_generated=False,
+        content="reply",
+        reply_to_message_id=1,
+    )
+    result = build_conversation_messages([msg1, msg2])
+    assert result[1] == {
+        "role": "user",
+        "content": "[msg_2] [user_2] (replying to [msg_1]): reply",
+    }
+
+
+def test_build_conversation_messages_blank_content_filtered():
+    msg1 = make_message(
+        telegram_message_id=1,
+        telegram_group_member_id=10,
+        is_generated=False,
+        content="",
+    )
+    msg2 = make_message(
+        telegram_message_id=2,
+        telegram_group_member_id=10,
+        is_generated=False,
+        content="visible",
+    )
+    result = build_conversation_messages([msg1, msg2])
+    assert len(result) == 1
+    assert result[0] == {"role": "user", "content": "[msg_1] [user_1]: visible"}
+
+
+def test_build_conversation_messages_truncates_long_content():
+    long_content = "a" * (PROMPT_MESSAGE_MAX_LENGTH + 50)
+    msg = make_message(
+        telegram_message_id=1,
+        telegram_group_member_id=10,
+        is_generated=False,
+        content=long_content,
+    )
+    result = build_conversation_messages([msg])
+    assert result[0]["content"].endswith("...")
+
+
+def test_build_conversation_messages_all_human_returns_user_roles():
+    msgs = [
+        make_message(
+            telegram_message_id=i,
+            telegram_group_member_id=10,
+            is_generated=False,
+            content=f"msg{i}",
+        )
+        for i in range(1, 4)
+    ]
+    result = build_conversation_messages(msgs)
+    assert len(result) == 3
+    assert all(entry["role"] == "user" for entry in result)
+
+
+def test_build_conversation_messages_mixed_roles_order():
+    msgs = [
+        make_message(
+            telegram_message_id=1,
+            telegram_group_member_id=10,
+            is_generated=False,
+            content="hello",
+        ),
+        make_message(
+            telegram_message_id=2,
+            telegram_group_member_id=None,
+            is_generated=True,
+            content="hi there",
+        ),
+        make_message(
+            telegram_message_id=3,
+            telegram_group_member_id=20,
+            is_generated=False,
+            content="how are you",
+        ),
+        make_message(
+            telegram_message_id=4,
+            telegram_group_member_id=None,
+            is_generated=True,
+            content="doing great",
+        ),
+    ]
+    result = build_conversation_messages(msgs)
+    assert [entry["role"] for entry in result] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert result[0]["content"] == "[msg_1] [user_1]: hello"
+    assert result[1]["content"] == "[msg_2] hi there"
+    assert result[2]["content"] == "[msg_3] [user_2]: how are you"
+    assert result[3]["content"] == "[msg_4] doing great"
+
+
+def test_build_conversation_messages_human_no_member_id_shows_unknown_user():
+    msg = make_message(
+        telegram_message_id=1,
+        telegram_group_member_id=None,
+        is_generated=False,
+        content="hello",
+    )
+    result = build_conversation_messages([msg])
+    assert result[0] == {"role": "user", "content": "[msg_1] [unknown_user]: hello"}
+
+
+def test_build_conversation_messages_all_whitespace_returns_empty():
+    msgs = [
+        make_message(telegram_message_id=1, telegram_group_member_id=10, content="   "),
+        make_message(telegram_message_id=2, telegram_group_member_id=10, content="\t\n"),
+    ]
+    assert build_conversation_messages(msgs) == []
+

@@ -28,3 +28,12 @@ class OpenRouterResponse(NamedTuple):
 class Prompt(NamedTuple):
     system: str
     user: str
+    temperature: float
+    max_tokens: int
+
+
+class ConversationPrompt(NamedTuple):
+    system: str
+    messages: list[dict[str, str]]
+    temperature: float
+    max_tokens: int

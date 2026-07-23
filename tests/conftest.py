@@ -11,7 +11,7 @@ from src.domain.entities import (
     GroupTrend,
     Request,
 )
-from src.domain.dto import TelegramMessage, OpenRouterResponse
+from src.domain.dto import TelegramMessage, OpenRouterResponse, Prompt, ConversationPrompt
 from src.application.ports.telegram_bot import TelegramBotPort
 from src.application.ports.openrouter_client import OpenRouterClient
 from src.application.ports.openrouter_request_repository import (
@@ -121,6 +121,28 @@ def make_openrouter_response(**overrides):
     )
     defaults.update(overrides)
     return OpenRouterResponse(**defaults)
+
+
+def make_prompt(**overrides):
+    defaults = dict(
+        system="sys",
+        user="usr",
+        temperature=0.5,
+        max_tokens=100,
+    )
+    defaults.update(overrides)
+    return Prompt(**defaults)
+
+
+def make_conversation_prompt(**overrides):
+    defaults = dict(
+        system="sys",
+        messages=[{"role": "user", "content": "[user_1]: hello"}],
+        temperature=0.9,
+        max_tokens=100,
+    )
+    defaults.update(overrides)
+    return ConversationPrompt(**defaults)
 
 
 async def async_iter(items):

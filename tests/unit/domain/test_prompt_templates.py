@@ -1,7 +1,10 @@
 import pytest
 
-from src.domain.constants.prompt_templates import PromptTemplate
-from src.domain.dto import Prompt
+from src.domain.constants.prompt_templates import (
+    PromptTemplate,
+    ConversationPromptTemplate,
+)
+from src.domain.dto import Prompt, ConversationPrompt
 
 
 def _make_template(system="{a} {b}", user="{a} {b}", template_vars=None):
@@ -9,6 +12,17 @@ def _make_template(system="{a} {b}", user="{a} {b}", template_vars=None):
         system_template=system,
         user_template=user,
         template_vars=template_vars or ["a", "b"],
+        temperature=0.5,
+        max_tokens=100,
+    )
+
+
+def _make_conversation_template(system="{a} {b}", template_vars=None):
+    return ConversationPromptTemplate(
+        system_template=system,
+        template_vars=template_vars or ["a", "b"],
+        temperature=0.9,
+        max_tokens=200,
     )
 
 
@@ -50,3 +64,44 @@ def test_render_returns_prompt_dto():
     assert isinstance(result, Prompt)
     assert hasattr(result, "system")
     assert hasattr(result, "user")
+
+
+def test_render_prompt_carries_temperature_and_max_tokens():
+    tpl = _make_template()
+    result = tpl.render(a="hello", b="world")
+    assert result.temperature == 0.5
+    assert result.max_tokens == 100
+
+
+def test_conversation_render_returns_conversation_prompt():
+    tpl = _make_conversation_template()
+    messages = [{"role": "user", "content": "hi"}]
+    result = tpl.render(messages, a="hello", b="world")
+    assert isinstance(result, ConversationPrompt)
+    assert "hello" in result.system
+    assert result.messages == messages
+
+
+def test_conversation_render_raises_on_missing_var():
+    tpl = _make_conversation_template()
+    with pytest.raises(ValueError, match="a"):
+        tpl.render([{"role": "user", "content": "hi"}], b="world")
+
+
+def test_conversation_render_raises_on_none_var():
+    tpl = _make_conversation_template()
+    with pytest.raises(ValueError, match="a"):
+        tpl.render([{"role": "user", "content": "hi"}], a=None, b="world")
+
+
+def test_conversation_render_carries_temperature_and_max_tokens():
+    tpl = _make_conversation_template()
+    result = tpl.render([{"role": "user", "content": "hi"}], a="x", b="y")
+    assert result.temperature == 0.9
+    assert result.max_tokens == 200
+
+
+def test_conversation_render_empty_messages():
+    tpl = _make_conversation_template()
+    result = tpl.render([], a="x", b="y")
+    assert result.messages == []

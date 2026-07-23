@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 
 from src.domain.exceptions import EmptyResponseError, OpenRouterRateLimitError
-from src.domain.dto import OpenRouterResponse, Prompt
+from src.domain.dto import OpenRouterResponse, Prompt, ConversationPrompt
 from src.application.ports.openrouter_client import OpenRouterClient
 
 
@@ -64,8 +64,6 @@ class HttpxOpenRouterClient(OpenRouterClient):
     @staticmethod
     def _build_payload(
         prompt: Prompt,
-        max_tokens: int,
-        temperature: float,
         model: str,
         top_p: float | None,
         top_k: int | None,
@@ -76,8 +74,31 @@ class HttpxOpenRouterClient(OpenRouterClient):
                 {"role": "system", "content": prompt.system},
                 {"role": "user", "content": prompt.user},
             ],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
+            "max_tokens": prompt.max_tokens,
+            "temperature": prompt.temperature,
+            "reasoning": {"effort": "none"},
+        }
+
+        if top_p is not None:
+            payload["top_p"] = top_p
+        if top_k is not None:
+            payload["top_k"] = top_k
+
+        return payload
+
+    @staticmethod
+    def _build_chat_payload(
+        prompt: ConversationPrompt,
+        model: str,
+        top_p: float | None,
+        top_k: int | None,
+    ) -> dict[str, Any]:
+        messages = [{"role": "system", "content": prompt.system}] + prompt.messages
+        payload = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": prompt.max_tokens,
+            "temperature": prompt.temperature,
             "reasoning": {"effort": "none"},
         }
 
@@ -109,19 +130,7 @@ class HttpxOpenRouterClient(OpenRouterClient):
         cap = min(self.RETRY_BACKOFF_MAX, self.RETRY_BACKOFF_BASE ** (attempt + 1))
         return random.uniform(0, cap)
 
-    async def request(
-        self,
-        prompt: Prompt,
-        max_tokens: int,
-        temperature: float,
-        model: str,
-        top_p: float | None = None,
-        top_k: int | None = None,
-    ) -> OpenRouterResponse:
-        payload = self._build_payload(
-            prompt, max_tokens, temperature, model, top_p, top_k
-        )
-
+    async def _execute_with_retry(self, payload: dict) -> OpenRouterResponse:
         total_attempts = self.MAX_RETRIES + 1
         last_exc: Exception = Exception("No attempts made")
 
@@ -204,3 +213,23 @@ class HttpxOpenRouterClient(OpenRouterClient):
                 await asyncio.sleep(sleep_s)
 
         raise last_exc
+
+    async def request(
+        self,
+        prompt: Prompt,
+        model: str,
+        top_p: float | None = None,
+        top_k: int | None = None,
+    ) -> OpenRouterResponse:
+        payload = self._build_payload(prompt, model, top_p, top_k)
+        return await self._execute_with_retry(payload)
+
+    async def chat_request(
+        self,
+        prompt: ConversationPrompt,
+        model: str,
+        top_p: float | None = None,
+        top_k: int | None = None,
+    ) -> OpenRouterResponse:
+        payload = self._build_chat_payload(prompt, model, top_p, top_k)
+        return await self._execute_with_retry(payload)
