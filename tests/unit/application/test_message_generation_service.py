@@ -182,6 +182,32 @@ async def test_reply_to_message_no_outer_quotes_unchanged():
 
 
 @pytest.mark.asyncio
+async def test_reply_to_message_strips_message_id_prefix():
+    ai_service = AsyncMock(spec=AIService)
+    message_repo = AsyncMock()
+    trend_repo = AsyncMock()
+    context_repo = AsyncMock()
+
+    _setup_context_mocks(message_repo, trend_repo, context_repo)
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(
+        content="[msg_6] Английский завтрак, бро"
+    )
+
+    service = _make_service(
+        ai_service=ai_service,
+        message_repo=message_repo,
+        trend_repo=trend_repo,
+        context_repo=context_repo,
+    )
+    group = make_group(telegram_group_id=10)
+    message = make_message(telegram_message_id=1, content="hi")
+
+    result = await service.reply_to_message(group, message)
+
+    assert result == "Английский завтрак, бро"
+
+
+@pytest.mark.asyncio
 async def test_follow_up_message_happy_path():
     ai_service = AsyncMock(spec=AIService)
     message_repo = AsyncMock()
@@ -345,6 +371,32 @@ async def test_follow_up_message_no_context_uses_fallback():
 
     prompt = ai_service.chat_request_with_paid_fallback.call_args[1]["prompt"]
     assert "[No context available]" in prompt.system
+
+
+@pytest.mark.asyncio
+async def test_follow_up_message_strips_message_id_prefix():
+    ai_service = AsyncMock(spec=AIService)
+    message_repo = AsyncMock()
+    trend_repo = AsyncMock()
+    context_repo = AsyncMock()
+
+    _setup_context_mocks(message_repo, trend_repo, context_repo)
+    ai_service.chat_request_with_paid_fallback.return_value = make_openrouter_response(
+        content="[msg_7] and the pacing was worse"
+    )
+
+    service = _make_service(
+        ai_service=ai_service,
+        message_repo=message_repo,
+        trend_repo=trend_repo,
+        context_repo=context_repo,
+    )
+    group = make_group(telegram_group_id=10)
+    original = make_message(telegram_message_id=1, content="hey")
+
+    result = await service.follow_up_message(group, original)
+
+    assert result == "and the pacing was worse"
 
 
 @pytest.mark.asyncio

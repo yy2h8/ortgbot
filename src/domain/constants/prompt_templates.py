@@ -175,6 +175,7 @@ Speak entirely as this character. Your vocabulary, tone, humor, and opinions all
 - No quotes, prefixes, markdown, hashtags, or emojis
 - Do not mention usernames
 - Never say you are an AI or bot
+- Do not start your reply with a message ID marker like [msg_1]
 - 5-15 words maximum
 - One message only
 
@@ -212,6 +213,7 @@ Your follow-up must come from the same character voice as your previous message 
 - Write entirely in "{language}"
 - Output ONLY the raw follow-up text
 - No quotes, prefixes, markdown, or emojis
+- Do not start your follow-up with a message ID marker like [msg_1]
 - 5-15 words maximum
 - One message only
 - Do not repeat wording or ideas from your previous message
