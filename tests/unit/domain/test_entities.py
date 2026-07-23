@@ -56,7 +56,7 @@ def test_create_group_member_auto_fills_timestamps():
 
 def test_create_message_auto_fills_timestamps():
     before = datetime.now(timezone.utc)
-    msg = make_message()
+    msg = Message.create(telegram_group_id=1, tg_id=100, content="hi", is_reply_to_bot_message=False, is_generated=False)
     after = datetime.now(timezone.utc)
     assert before <= msg.timestamp <= after
     assert before <= msg.created_at <= after

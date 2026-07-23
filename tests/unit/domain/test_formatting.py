@@ -1,7 +1,6 @@
 from src.domain.services.formatting import (
     PROMPT_MESSAGE_MAX_LENGTH,
     format_trends_for_prompt,
-    strip_message_id_prefix,
     strip_paired_quotes,
     truncate_for_prompt,
 )
@@ -98,43 +97,6 @@ def test_strip_paired_quotes_strips_only_one_layer():
 
 def test_strip_paired_quotes_single_quotes_unchanged():
     assert strip_paired_quotes("'hello'") == "'hello'"
-
-
-# ---------------------------------------------------------------------------
-# strip_message_id_prefix
-# ---------------------------------------------------------------------------
-
-
-def test_strip_message_id_prefix_removes_single_digit():
-    assert strip_message_id_prefix("[msg_6] hello") == "hello"
-
-
-def test_strip_message_id_prefix_removes_multi_digit():
-    assert strip_message_id_prefix("[msg_42] hello") == "hello"
-
-
-def test_strip_message_id_prefix_no_marker_unchanged():
-    assert strip_message_id_prefix("just text") == "just text"
-
-
-def test_strip_message_id_prefix_empty_string():
-    assert strip_message_id_prefix("") == ""
-
-
-def test_strip_message_id_prefix_only_marker():
-    assert strip_message_id_prefix("[msg_1]") == ""
-
-
-def test_strip_message_id_prefix_strips_leading_whitespace_after_marker():
-    assert strip_message_id_prefix("[msg_2]   spaced") == "spaced"
-
-
-def test_strip_message_id_prefix_marker_not_at_start_unchanged():
-    assert strip_message_id_prefix("text [msg_1] more") == "text [msg_1] more"
-
-
-def test_strip_message_id_prefix_non_numeric_inside_brackets_unchanged():
-    assert strip_message_id_prefix("[user_1] hello") == "[user_1] hello"
 
 
 # ---------------------------------------------------------------------------

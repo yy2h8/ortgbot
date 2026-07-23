@@ -44,10 +44,10 @@ Therefore all incoming messages are sanitized (before storing):
 
 When generating a reply or analyzing a conversation all users are anonymized:
 ```
-[msg_1] user_1: hello everyone
-[msg_2] user_2: hey what's up
-[msg_3] you (replying to [msg_2]): not much!
-[msg_4] user_1: nice
+user_1 (14:02): hello everyone
+user_2 (14:03): hey what's up
+you: not much!
+user_1 (14:04): nice
 ```
 No real names, usernames, or Telegram IDs ever reach the AI.
 

@@ -9,7 +9,7 @@ from src.domain.constants.prompt_templates import (
 )
 from src.domain.constants.defaults import DEFAULT_PERSONA
 from src.domain.services.conversation_formatting import build_conversation_messages
-from src.domain.services.formatting import strip_paired_quotes, strip_message_id_prefix
+from src.domain.services.formatting import strip_paired_quotes
 from src.application.services.ai_service import AIService
 from src.application.ports.group_context_repository import GroupContextRepository
 from src.application.ports.group_trend_repository import GroupTrendRepository
@@ -97,7 +97,7 @@ class MessageGenerationService:
             prompt=prompt,
             group_id=group.telegram_group_id,
         )
-        return strip_paired_quotes(strip_message_id_prefix(response.content))
+        return strip_paired_quotes(response.content)
 
     async def follow_up_message(self, group: Group, bot_message: Message) -> str:
         conversation_messages, trends, context = await self._prepare_context(
@@ -114,4 +114,4 @@ class MessageGenerationService:
             prompt=prompt,
             group_id=group.telegram_group_id,
         )
-        return strip_paired_quotes(strip_message_id_prefix(response.content))
+        return strip_paired_quotes(response.content)

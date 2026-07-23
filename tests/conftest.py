@@ -49,6 +49,7 @@ def make_message(**overrides):
         content="Hello world",
         is_reply_to_bot_message=False,
         is_generated=False,
+        timestamp=datetime(2024, 1, 1, 16, 34, tzinfo=timezone.utc),
     )
     defaults.update(overrides)
     return Message.create(**defaults)
